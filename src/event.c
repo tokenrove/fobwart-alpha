@@ -1,7 +1,7 @@
 /* 
  * event.c
  * Created: Sun Jul 15 03:40:42 2001 by tek@wiw.org
- * Revised: Wed Jul 18 00:30:05 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 16:39:18 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -40,11 +40,21 @@ void processevents(gamedata_t *gd)
     room_t *room;
     byte *s;
     int slen;
+    bool status;
 
-    d_set_fetch(gd->rooms, gd->curroom, (void **)&room);
+    status = d_set_fetch(gd->rooms, gd->curroom, (void **)&room);
+    if(status != success) {
+        d_error_debug(__FUNCTION__": failed to fetch current room!\n");
+        return;
+    }
 
     while(evsk_top(&gd->evsk, &ev)) {
-        d_set_fetch(gd->objs, ev.subject, (void **)&o);
+        status = d_set_fetch(gd->objs, ev.subject, (void **)&o);
+        if(status != success) {
+            d_error_debug(__FUNCTION__": failed to fetch object %d.\n",
+                          ev.subject);
+            return;
+        }
 
         switch(ev.verb) {
         case VERB_RIGHT:
