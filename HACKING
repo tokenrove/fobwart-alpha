@@ -92,6 +92,7 @@ Features:
  Ordered:
  3) Server resource sync.
  4) Dual-worlds system.
+ 5) Server db sync at regular intervals.
  6) Add server controls (at the very least, reload when SIGHUP'd)
  7) Add ``really quit?'' dialog if escape is hit.
  Make-or-break:

@@ -8,33 +8,19 @@
  * 
  */
 
-#include <dentata/types.h>
-#include <dentata/image.h>
-#include <dentata/error.h>
-#include <dentata/time.h>
-#include <dentata/raster.h>
-#include <dentata/event.h>
-#include <dentata/font.h>
-#include <dentata/sprite.h>
-#include <dentata/tilemap.h>
-#include <dentata/manager.h>
-#include <dentata/sample.h>
-#include <dentata/audio.h>
-#include <dentata/s3m.h>
-#include <dentata/set.h>
-#include <dentata/color.h>
-#include <dentata/memory.h>
-#include <dentata/random.h>
-#include <dentata/util.h>
-
-#include <lua.h>
-
 #include "fobwart.h"
 #include "fobnet.h"
 #include "fobdb.h"
 #include "fobserv.h"
 
+#include <dentata/error.h>
+#include <dentata/color.h>
+#include <dentata/memory.h>
+#include <dentata/random.h>
+#include <dentata/util.h>
+
 #define PROGNAME "fobserv"
+
 
 int handleclient(client_t *cli, serverdata_t *sd);
 void wipeclient(d_set_t *clients, dword key);
@@ -42,6 +28,7 @@ bool loadservdata(serverdata_t *sd);
 void sendevents(serverdata_t *sd);
 void mainloop(serverdata_t *sd);
 bool getobject(serverdata_t *sd, objhandle_t key);
+void updatemanagedframes(worldstate_t *ws);
 
 
 int main(void)
@@ -49,12 +36,14 @@ int main(void)
     serverdata_t sd;
     bool status;
 
+    /* Initialize world state */
     status = initworldstate(&sd.ws);
     if(status != success)
         d_error_fatal("%s: failed to initize world.\n", PROGNAME);
 
     setluaworldstate(&sd.ws);
 
+    /* Load the various databases */
     sd.logindb = newdbh();
     status = loadlogindb(sd.logindb);
     if(status != success)
@@ -70,22 +59,29 @@ int main(void)
     if(status != success)
         d_error_fatal("%s: failed to load room db.\n", PROGNAME);
 
+    /* Load server data */
     status = loadservdata(&sd);
     if(status != success)
         d_error_fatal("%s: failed to load initial data.\n", PROGNAME);
 
-    if(net_newserver(&sd.nh, FOBPORT) == failure)
-        d_error_fatal("%s: failed to initialize listening socket.\n",
-                      PROGNAME);
-
+    /* Empty client set, initialize the event stack */
     sd.clients = d_set_new(0);
     if(sd.clients == NULL)
         d_error_fatal("%s: unable to allocate client set.\n", PROGNAME);
 
     evsk_new(&sd.evsk);
 
+    /* Start listening on the network */
+    if(net_newserver(&sd.nh, FOBPORT) == failure)
+        d_error_fatal("%s: failed to initialize listening socket.\n",
+                      PROGNAME);
+
+
+    /* Do the main loop */
     mainloop(&sd);
 
+
+    /* Shutdown and destroy */
     evsk_delete(&sd.evsk);
     d_set_delete(sd.clients);
     closeobjectdb(sd.objectdb);
@@ -110,12 +106,13 @@ void mainloop(serverdata_t *sd)
 
     nframed = 0;
     nloggedin = 0;
-    activenalloc = 64;
+    activenalloc = 64; /* arbitrary */
     activeclients = d_memory_new(activenalloc*sizeof(dword));
 
     while(1) {
         net_servselect(sd->nh, &servsockactive, sd->clients, activeclients);
 
+	/* handle new connections */
         if(servsockactive) {
             net_accept(sd->nh, &clinh);
             cli = d_memory_new(sizeof(client_t));
@@ -167,6 +164,7 @@ void mainloop(serverdata_t *sd)
             sendevents(sd);
             processevents(&sd->evsk, (void *)sd);
             updatephysics(&sd->ws);
+	    updatemanagedframes(&sd->ws);
             while(evsk_pop(&sd->evsk, NULL));
             nframed = 0;
         }
@@ -240,19 +238,9 @@ bool loadservdata(serverdata_t *sd)
     /* load room db */
     sd->ws.rooms = d_set_new(0);
     if(sd->ws.rooms == NULL) return failure;
-    
-    room = d_memory_new(sizeof(room_t));
-    if(room == NULL) return failure;
-    room->handle = 0;
-    status = d_set_add(sd->ws.rooms, room->handle, (void *)room);
-    if(status == failure) return failure;
 
-    /* The procedure for loading all rooms that will be here eventually
-     * will either use a database cursor or will load a specified default
-     * room and then traverse all connections from that room */
-    status = roomdb_get(sd->roomdb, room->handle, room);
-    if(status == failure) return failure;
-    deskelroom(room);
+    /* Load each room */
+    roomdb_getall(sd->roomdb, sd->ws.rooms);
 
     /* load object db */
     sd->ws.objs = d_set_new(0);
@@ -260,6 +248,8 @@ bool loadservdata(serverdata_t *sd)
     d_iterator_reset(&it);
     while(key = d_set_nextkey(&it, sd->ws.rooms), key != D_SET_INVALIDKEY) {
         d_set_fetch(sd->ws.rooms, key, (void **)&room);
+	deskelroom(room);
+
         d_iterator_reset(&it2);
         while(key2 = d_set_nextkey(&it2, room->contents),
               key2 != D_SET_INVALIDKEY) {
@@ -290,8 +280,9 @@ int handleclient(client_t *cli, serverdata_t *sd)
     if(net_readpack(cli->nh, &p) == failure) return -1;
 
     switch(cli->state) {
-    case 0: /* expect login, all other packets rejected */
-        if(p.type == PACK_LOGIN) {
+    case 0: /* expect login or resource sync, all other packets rejected */
+	switch(p.type) {
+	case PACK_LOGIN:
             d_error_debug("Login attempt from %d (%s)", cli->handle,
                           p.body.login.name.data);
             status = verifylogin(sd->logindb, (char *)p.body.login.name.data,
@@ -307,11 +298,18 @@ int handleclient(client_t *cli, serverdata_t *sd)
                 d_error_debug(" FAILED\n");
                 return -1;
             }
+	    break;
 
-        } else {
+	case PACK_GETRESLIST:
+	    break;
+
+	case PACK_GETFILE:
+	    break;
+
+	default:
             d_error_debug("%d tried to skip login phase.\n", cli->handle);
             return -1;
-        }
+	}
         break;
 
     case 1: /* expect sync */
@@ -371,6 +369,8 @@ int handleclient(client_t *cli, serverdata_t *sd)
 }
 
 
+/* wipeclient
+ * Kick a client off the server. */
 void wipeclient(d_set_t *clients, dword key)
 {
     client_t *cli;
@@ -421,12 +421,36 @@ bool reloaddbs(serverdata_t *sd)
     status = loadlogindb(sd->logindb);
     if(status != success) return failure;
 
-    /* sync object db */
+    /* FIXME sync object db here */
     closeobjectdb(sd->objectdb);
     status = loadobjectdb(sd->objectdb);
     if(status != success) return failure;
 
+    /* FIXME: sync room db here */
+    closeroomdb(sd->roomdb);
+    status = loadroomdb(sd->roomdb);
+    if(status != success) return failure;
+
     return success;
 }
+
+
+/* updatemanagedframes
+ * Skip each sprite to its next frame, to avoid inconsistencies with
+ * clients. */
+void updatemanagedframes(worldstate_t *ws)
+{
+    object_t *o;
+    dword key;
+    d_iterator_t it;
+
+    d_iterator_reset(&it);
+    while(key = d_set_nextkey(&it, ws->objs), key != D_SET_INVALIDKEY) {
+	d_set_fetch(ws->objs, key, (void **)&o);
+	d_sprite_stepframe(o->sprite);
+    }
+    return;
+}
+
 
 /* EOF fobserv.c */

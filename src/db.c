@@ -398,6 +398,35 @@ bool roomdb_get(dbhandle_t *db_, roomhandle_t handle, room_t *room)
 }
 
 
+
+bool roomdb_getall(dbhandle_t *db_, d_set_t *rooms)
+{
+    DBT key, data;
+    dbinternal_t *db = db_;
+    int i;
+    room_t *room;
+
+    d_memory_set(&key, 0, sizeof(key));
+    d_memory_set(&data, 0, sizeof(data));
+    key.size = sizeof(roomhandle_t);
+    key.data = &handle;
+
+    i = db->p->get(db->p, NULL, &key, &data, 0);
+    if(i != 0) {
+        db->p->err(db->p, i, "dbp->get");
+        return failure;
+    }
+
+    room = d_memory_new(sizeof(room_t));
+    if(room == NULL) return failure;
+    status = d_set_add(rooms, room->handle, (void *)room);
+    if(status == failure) return failure;
+    roomdecode(room, &data);
+
+    return success;
+}
+
+
 bool roomdb_put(dbhandle_t *db_, roomhandle_t handle, room_t *room)
 {
     DBT key, data;
