@@ -53,6 +53,7 @@ void processevents(gamedata_t *gd)
         if(status != success) {
             d_error_debug(__FUNCTION__": failed to fetch object %d.\n",
                           ev.subject);
+            evsk_pop(&gd->evsk);
             continue;
         }
 
