@@ -134,7 +134,7 @@ void mainloop(serverdata_t *sd)
             d_set_fetch(sd->clients, activeclients[i], (void **)&cli);
             ret = handleclient(cli, sd);
             if(ret == -1)
-                wipeclient(sd->clients, i);
+                wipeclient(sd->clients, activeclients[i]);
             else if(ret == 1)
                 nframed++;
         }
@@ -355,11 +355,23 @@ int handleclient(client_t *cli, serverdata_t *sd)
 void wipeclient(d_set_t *clients, dword key)
 {
     client_t *cli;
+    bool status;
 
-    d_set_fetch(clients, key, (void **)&cli);
-    d_set_remove(clients, key);
+    status = d_set_fetch(clients, key, (void **)&cli);
+    if(status != success) {
+        d_error_debug(__FUNCTION__": bad key, couldn't fetch client.\n");
+        return;
+    }
+
+    status = d_set_remove(clients, key);
+    if(status != success) {
+        d_error_debug(__FUNCTION__": couldn't remove client from set?\n");
+        return;
+    }
+
     net_close(cli->nh);
     cli->nh = NULL;
+    cli->handle = -1;
     d_memory_delete(cli);
     return;
 }
