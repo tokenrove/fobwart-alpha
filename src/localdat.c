@@ -1,7 +1,7 @@
 /* 
  * localdat.c
  * Created: Sat Jul 14 23:40:37 2001 by tek@wiw.org
- * Revised: Thu Jul 19 18:38:33 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 19:24:28 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -27,6 +27,8 @@
 #include <lua.h>
 
 #include "fobwart.h"
+#include "fobclient.h"
+
 
 extern d_image_t *ebar_new(gamedata_t *gd);
 

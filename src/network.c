@@ -1,7 +1,7 @@
 /* 
  * network.c
  * Created: Wed Jul 18 01:29:32 2001 by tek@wiw.org
- * Revised: Thu Jul 19 18:56:39 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 19:40:25 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -39,13 +39,15 @@
 #include <netinet/in.h>
 
 #include "fobwart.h"
-#include "fobnet.h"
+#include "fobclient.h"
+
 
 bool initnet(gamedata_t *gd, char *servname, int port);
 void closenet(gamedata_t *gd);
 bool login(gamedata_t *gd, char *uname, char *password);
 void syncevents(gamedata_t *gd);
 bool getobject(gamedata_t *gd, word handle);
+
 
 bool initnet(gamedata_t *gd, char *servname, int port)
 {
@@ -105,9 +107,9 @@ bool login(gamedata_t *gd, char *uname, char *password)
     bool status;
 
     p.type = PACK_LOGIN;
-    p.body.login.name = uname;
+    p.body.login.name = (byte *)uname;
     p.body.login.namelen = strlen(uname)+1;
-    p.body.login.password = password;
+    p.body.login.password = (byte *)password;
     p.body.login.pwlen = strlen(password)+1;
     status = writepack(gd->socket, p);
     status &= readpack(gd->socket, &p);

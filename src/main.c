@@ -1,7 +1,7 @@
 /* 
  * main.c
  * Created: Sat Jul 14 23:07:02 2001 by tek@wiw.org
- * Revised: Thu Jul 19 19:01:15 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 19:40:11 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -28,6 +28,7 @@
 #include <lua.h>
 
 #include "fobwart.h"
+#include "fobclient.h"
 
 void mainloop(gamedata_t *gd);
 void updatedecor(gamedata_t *gd, object_t *player);
@@ -162,7 +163,7 @@ void mainloop(gamedata_t *gd)
             gd->readycount--;
 
         if(gd->readycount%10 > 5)
-            d_font_printf(gd->raster, gd->largefont, pt, "GOOD MORNING");
+            d_font_printf(gd->raster, gd->largefont, pt, (byte *)"GOOD MORNING");
 
         d_raster_update();
         d_time_endcount(th);

@@ -1,7 +1,7 @@
 /* 
  * event.c
  * Created: Sun Jul 15 03:40:42 2001 by tek@wiw.org
- * Revised: Thu Jul 19 18:44:00 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 19:25:20 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -29,9 +29,12 @@
 #include <lua.h>
 
 #include "fobwart.h"
+#include "fobclient.h"
+
 
 void processevents(gamedata_t *gd);
 int localsprintf(byte **s, byte *msg, ...);
+
 
 void processevents(gamedata_t *gd)
 {
@@ -112,6 +115,7 @@ void processevents(gamedata_t *gd)
     }
     return;
 }
+
 
 int localsprintf(byte **s, byte *msg, ...)
 {

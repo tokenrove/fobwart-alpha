@@ -1,7 +1,7 @@
 /* 
  * local.c
  * Created: Sat Jul 14 23:30:18 2001 by tek@wiw.org
- * Revised: Wed Jul 18 20:55:47 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 19:24:11 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -25,6 +25,8 @@
 #include <lua.h>
 
 #include "fobwart.h"
+#include "fobclient.h"
+
 
 bool initlocal(gamedata_t *gd);
 void deinitlocal(gamedata_t *gd);

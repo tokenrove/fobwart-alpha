@@ -1,7 +1,7 @@
 /* 
  * decor.c
  * Created: Sun Jul 15 05:52:57 2001 by tek@wiw.org
- * Revised: Tue Jul 17 06:05:07 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 19:25:40 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -25,12 +25,15 @@
 #include <lua.h>
 
 #include "fobwart.h"
+#include "fobclient.h"
 
 #define EBAR_W 8
 #define EBAR_H 48
 
+
 d_image_t *ebar_new(gamedata_t *gd);
 void ebar_draw(d_image_t *bar, int nslivers);
+
 
 d_image_t *ebar_new(gamedata_t *gd)
 {
@@ -47,6 +50,7 @@ d_image_t *ebar_new(gamedata_t *gd)
         p->palette = gd->raster->palette;
     return p;
 }
+
 
 void ebar_draw(d_image_t *bar, int nslivers)
 {

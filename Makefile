@@ -11,7 +11,7 @@ DENTATADIR=/usr/local
 DEFINES=-DTHIRTYTWOBIT
 CPPFLAGS=$(DEFINES) -I$(DENTATADIR)/include
 CFLAGS=-Wall -pedantic -O6 -g
-LDFLAGS=-L$(DENTATADIR)/lib -ldentata -llua -ldb2
+LDFLAGS=-L$(DENTATADIR)/lib -ldentata -llua -ldb3
 
 ###
 # For X11:
@@ -24,12 +24,12 @@ CLIOBJS=main.o local.o localdat.o physics.o event.o decor.o audiounix.o \
         evsk.o network.o netcommon.o datacommon.o
 CLIDATA=
 CLIPROG=fobwart
-CLIHEADERS=fobwart.h
+CLIHEADERS=fobwart.h fobclient.h
 
 SERVOBJS=fobserv.o netcommon.o datacommon.o evsk.o
 SERVDATA=
 SERVPROG=fobserv
-SERVHEADERS=fobnet.h
+SERVHEADERS=fobwart.h fobserv.h
 
 UTILS=sprcomp tmapcomp foblogindb
 
@@ -53,6 +53,6 @@ clean:
 	rm -f $(CLIOBJS) $(SERVOBJS) *~ src/*~
 
 distclean: clean
-	rm -f $(CLIPROG) $(SERVPROG)
+	rm -f $(CLIPROG) $(SERVPROG) $(UTILS)
 
 # EOF Makefile

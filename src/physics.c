@@ -1,7 +1,7 @@
 /* 
  * physics.c
  * Created: Sun Jul 15 03:42:53 2001 by tek@wiw.org
- * Revised: Tue Jul 17 19:30:19 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 19:24:59 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -26,11 +26,14 @@
 #include <lua.h>
 
 #include "fobwart.h"
+#include "fobclient.h"
+
 
 void updatephysics(gamedata_t *gd);
 bool checktmcollide(object_t *obj, d_tilemap_t *tm, d_point_t pt,
                     int vx, int vy);
 void updateobjectphysics(gamedata_t *gd, object_t *obj);
+
 
 void updatephysics(gamedata_t *gd)
 {
@@ -43,6 +46,7 @@ void updatephysics(gamedata_t *gd)
         updateobjectphysics(gd, o);
     }
 }
+
 
 void updateobjectphysics(gamedata_t *gd, object_t *obj)
 {
@@ -105,6 +109,7 @@ void updateobjectphysics(gamedata_t *gd, object_t *obj)
 
     return;
 }
+
 
 bool checktmcollide(object_t *obj, d_tilemap_t *tm, d_point_t pt,
                     int vx, int vy)

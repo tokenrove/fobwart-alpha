@@ -1,7 +1,7 @@
 /* 
  * netcommon.c
  * Created: Thu Jul 19 18:01:48 2001 by tek@wiw.org
- * Revised: Thu Jul 19 18:32:41 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 19:26:23 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -40,7 +40,7 @@
 #include <netinet/in.h>
 
 #include "fobwart.h"
-#include "fobnet.h"
+#include "fobclient.h"
 
 
 bool readpack(int socket, packet_t *p)

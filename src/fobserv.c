@@ -1,7 +1,7 @@
 /* 
  * fobserv.c
  * Created: Wed Jul 18 03:15:09 2001 by tek@wiw.org
- * Revised: Thu Jul 19 19:00:35 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 19:22:50 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -40,24 +40,10 @@
 #include <lua.h>
 
 #include "fobwart.h"
-#include "fobnet.h"
+#include "fobserv.h"
 
 #define PORT 6400
 #define PROGNAME "fobserv"
-
-typedef struct client_s {
-    word handle;
-    int socket;
-    int state;
-} client_t;
-
-typedef struct serverdata_s {
-    d_set_t *rooms;
-    d_set_t *objs;
-    d_set_t *clients;
-    eventstack_t evsk;
-    int socket;
-} serverdata_t;
 
 int initlisten(int *sock);
 int handleclient(client_t *cli, eventstack_t *evsk);
