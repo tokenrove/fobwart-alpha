@@ -1,7 +1,7 @@
 /* 
  * foblogindb.c
  * Created: Thu Jul 19 17:25:20 2001 by tek@wiw.org
- * Revised: Thu Jul 19 20:50:07 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 23:56:14 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -27,12 +27,15 @@
 
 #include <sys/types.h>
 #include <limits.h>
-#include <db3.h>
+#include <db.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <netinet/in.h>
+
+#include <lua.h>
 
 #include "fobwart.h"
 #include "fobserv.h"
@@ -46,6 +49,11 @@ int main(int argc, char **argv)
     DBT key, data;
     loginrec_t loginrec;
     int i, comspec = 0;
+    word wordbuf;
+
+    memset(&key, 0, sizeof(key));
+    memset(&data, 0, sizeof(data));
+    memset(&loginrec, 0, sizeof(loginrec));
 
     for(i = 1; i < argc; i++) {
         if(argv[i][0] == '-') {
@@ -60,6 +68,7 @@ int main(int argc, char **argv)
                 fprintf(stderr, "Unknown command. (try ``help'')\n");
                 exit(EXIT_FAILURE);
             }
+            comspec++;
         } else {
             if(command == ADD) {
                 if(key.data == NULL) {
@@ -67,6 +76,13 @@ int main(int argc, char **argv)
                     key.size = strlen(key.data)+1;
                 } else if(loginrec.password == NULL) {
                     loginrec.password = argv[i];
+                } else {
+                    loginrec.object = atoi(argv[i]);
+                }
+            } else if(command == VIEW) {
+                if(key.data == NULL) {
+                    key.data = argv[i];
+                    key.size = strlen(key.data)+1;
                 }
             } else {
                 fprintf(stderr, "Bad argument to command. (try ``help'')\n");
@@ -93,12 +109,36 @@ int main(int argc, char **argv)
         break;
 
     case CREATE:
-    case ADD:
     case REMOVE:
     case CHANGE:
         break;
 
+    case ADD:
+        data.size = strlen(loginrec.password)+1+sizeof(loginrec.object);
+        data.data = malloc(data.size);
+        memcpy(data.data, loginrec.password, strlen(loginrec.password)+1);
+        wordbuf = htons(loginrec.object);
+        memcpy(data.data+strlen(loginrec.password)+1, &wordbuf,
+               sizeof(wordbuf));
+        i = dbp->put(dbp, NULL, &key, &data, 0);
+        if(i != 0) {
+            dbp->err(dbp, i, "dbp->put");
+            exit(EXIT_FAILURE);
+        }
+        break;
+
     case VIEW:
+        i = dbp->get(dbp, NULL, &key, &data, 0);
+        if(i != 0) {
+            dbp->err(dbp, i, "dbp->put");
+            exit(EXIT_FAILURE);
+        }
+        loginrec.password = data.data;
+        memcpy(&wordbuf, data.data+strlen(loginrec.password)+1,
+               sizeof(wordbuf));
+        loginrec.object = ntohs(wordbuf);
+        printf("%s -> %s, %d\n", key.data, loginrec.password,
+               loginrec.object);
         break;
     }
 

@@ -1,7 +1,7 @@
 /* 
  * main.c
  * Created: Sat Jul 14 23:07:02 2001 by tek@wiw.org
- * Revised: Thu Jul 19 23:21:13 2001 by tek@wiw.org
+ * Revised: Fri Jul 20 00:13:51 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -39,10 +39,13 @@ int main(int argc, char **argv)
 {
     gamedata_t gd;
     bool status;
-    char *server = "localhost";
+    char *server = "localhost", *uname = "tek", *password = "dwarfinvasion";
 
-    if(argc > 1)
-        server = argv[1];
+    if(argc > 1) {
+        uname = argv[1];
+        password = argv[2];
+        server = argv[3];
+    }
 
     /* initialize network */
     status = initnet(&gd, server, 6400);
@@ -78,9 +81,9 @@ int main(int argc, char **argv)
     }
 
     /* login */
-    status = login(&gd, "tek", "dwarfinvasion");
+    status = login(&gd, uname, password);
     if(status != success) {
-        d_error_fatal("Login as %s failed.\n", "tek");
+        d_error_fatal("Login as %s failed.\n", uname);
         return 1;
     }
 

@@ -1,7 +1,7 @@
 /* 
  * fobserv.c
  * Created: Wed Jul 18 03:15:09 2001 by tek@wiw.org
- * Revised: Thu Jul 19 22:45:07 2001 by tek@wiw.org
+ * Revised: Fri Jul 20 00:17:12 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -30,6 +30,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <limits.h>
+#include <db.h>
+#include <fcntl.h>
 
 #include <netdb.h>
 #include <sys/types.h>
@@ -51,6 +54,8 @@ int handshake(int clisock);
 bool loadservdata(serverdata_t *sd);
 void sendevents(serverdata_t *sd);
 void mainloop(serverdata_t *sd);
+bool loadlogindb(serverdata_t *sd);
+bool verifylogin(serverdata_t *sd, char *name, char *pw, objhandle_t *object);
 
 
 int main(void)
@@ -67,6 +72,12 @@ int main(void)
     status = loadservdata(&sd);
     if(status != success) {
         fprintf(stderr, "%s: failed to load initial data.\n", PROGNAME);
+        exit(EXIT_FAILURE);
+    }
+
+    status = loadlogindb(&sd);
+    if(status != success) {
+        fprintf(stderr, "%s: failed to load login.db.\n", PROGNAME);
         exit(EXIT_FAILURE);
     }
 
@@ -341,12 +352,21 @@ int handleclient(client_t *cli, serverdata_t *sd)
     switch(cli->state) {
     case 0: /* expect login, all other packets rejected */
         if(p.type == PACK_LOGIN) {
-            fprintf(stderr, "Login from %d (%s/%s)\n", cli->handle,
-                    p.body.login.name, p.body.login.password);
-            p.type = PACK_AYUP;
-            p.body.handle = cli->handle;
-            if(writepack(cli->socket, p) == failure) return -1;
-            cli->state++;
+            fprintf(stderr, "Login attempt from %d (%s)", cli->handle,
+                    p.body.login.name);
+            status = verifylogin(sd, (char *)p.body.login.name,
+                                 (char *)p.body.login.password,
+                                 &p.body.handle);
+            if(status == success) {
+                fprintf(stderr, " succeeded.\n");
+                p.type = PACK_AYUP;
+                if(writepack(cli->socket, p) == failure) return -1;
+                cli->handle = p.body.handle;
+                cli->state++;
+            } else {
+                fprintf(stderr, " FAILED\n");
+                return -1;
+            }
 
         } else {
             fprintf(stderr, "%d tried to skip login phase.\n",
@@ -399,6 +419,64 @@ int handleclient(client_t *cli, serverdata_t *sd)
     }
 
     return 0;
+}
+
+
+bool loadlogindb(serverdata_t *sd)
+{
+    int i;
+
+    i = db_create(&sd->logindbp, NULL, 0);
+    if(i != 0) {
+        fprintf(stderr, "%s: db_create: %s\n", PROGNAME, db_strerror(i));
+        return failure;
+    }
+
+    i = sd->logindbp->open(sd->logindbp, "login.db", NULL, DB_BTREE,
+                           DB_CREATE, 0664);
+    if(i != 0) {
+        sd->logindbp->err(sd->logindbp, i, "%s", "login.db");
+        return failure;
+    }
+
+    return success;
+}
+
+
+void closelogindb(serverdata_t *sd)
+{
+    sd->logindbp->close(sd->logindbp, 0);
+    return;
+}
+
+
+bool verifylogin(serverdata_t *sd, char *name, char *pw, objhandle_t *object)
+{
+    DBT key, data;
+    loginrec_t loginrec;
+    word wordbuf;
+    int i;
+
+    memset(&key, 0, sizeof(key));
+    memset(&data, 0, sizeof(data));
+    memset(&loginrec, 0, sizeof(loginrec));
+
+    key.data = name;
+    key.size = strlen(name)+1;
+
+    i = sd->logindbp->get(sd->logindbp, NULL, &key, &data, 0);
+    if(i != 0)
+        return failure;
+    loginrec.password = data.data;
+    memcpy(&wordbuf, (char *)data.data+strlen(loginrec.password)+1,
+           sizeof(wordbuf));
+    loginrec.object = ntohs(wordbuf);
+
+    if(strcmp(loginrec.password, pw) != 0)
+        return failure;
+
+    *object = loginrec.object;
+    return success;
 }
 
 /* EOF fobserv.c */

@@ -1,7 +1,7 @@
 /* 
  * event.c
  * Created: Sun Jul 15 03:40:42 2001 by tek@wiw.org
- * Revised: Thu Jul 19 22:21:29 2001 by tek@wiw.org
+ * Revised: Fri Jul 20 00:10:28 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -27,7 +27,14 @@
 #include <dentata/util.h>
 
 #include <lua.h>
+#include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <limits.h>
+#include <db.h>
+#include <fcntl.h>
 
 #include "fobwart.h"
 #include "fobserv.h"
@@ -41,8 +48,6 @@ void processevents(serverdata_t *sd)
     event_t ev;
     object_t *o;
     room_t *room;
-    byte *s;
-    int slen;
     bool status;
     int i;
 
@@ -100,7 +105,7 @@ void processevents(serverdata_t *sd)
             break;
 
         case VERB_TALK:
-            fprintf(stderr, "<%s> %s\n", o->name, ev.auxdata);
+            fprintf(stderr, "<%s> %s\n", o->name, (char *)ev.auxdata);
             d_memory_delete(ev.auxdata);
             ev.auxdata = NULL;
             break;
