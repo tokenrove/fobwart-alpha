@@ -1,7 +1,7 @@
 /* 
  * network.c
  * Created: Wed Jul 18 01:29:32 2001 by tek@wiw.org
- * Revised: Wed Jul 18 22:33:54 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 16:27:30 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -125,12 +125,21 @@ void syncevents(gamedata_t *gd)
     packet_t p;
 
     for(i = 0; i < gd->evsk.top; i++) {
-        if(gd->evsk.events[i].verb != VERB_AUTO) {
-            p.type = PACK_EVENT;
-            p.body.event = gd->evsk.events[i];
-            writepack(gd->socket, p);
-        }
+        p.type = PACK_EVENT;
+        p.body.event = gd->evsk.events[i];
+        writepack(gd->socket, p);
     }
+    p.type = PACK_FRAME;
+    i = writepack(gd->socket, p);
+    if(i == -1)
+        d_error_debug(__FUNCTION__": write frame failed.\n");
+    while(i = readpack(gd->socket, &p), i != -1 && p.type != PACK_FRAME) {
+        if(p.type != PACK_EVENT)
+            d_error_debug(__FUNCTION__": read event failed.\n");
+        evsk_push(&gd->evsk, p.body.event);
+    }
+    if(i == -1)
+        d_error_debug(__FUNCTION__": read frame failed.\n");
     return;
 }
 
@@ -217,6 +226,9 @@ bool readpack(int socket, packet_t *p)
         p->body.handle = ntohs(wordbuf);
         break;
 
+    case PACK_FRAME:
+        break;
+
     default:
         d_error_debug(__FUNCTION__": default. (%d)\n", p->type);
         goto error;
@@ -296,6 +308,9 @@ bool writepack(int socket, packet_t p)
         i = write(socket, &wordbuf, 2);
         if(i == -1) goto error;
         if(i == 0) return failure;
+        break;
+
+    case PACK_FRAME:
         break;
 
     default:

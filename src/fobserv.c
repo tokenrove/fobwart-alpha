@@ -1,7 +1,7 @@
 /* 
  * fobserv.c
  * Created: Wed Jul 18 03:15:09 2001 by tek@wiw.org
- * Revised: Wed Jul 18 22:12:40 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 16:28:34 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -51,16 +51,22 @@ typedef struct client_s {
     int state;
 } client_t;
 
+typedef struct serverdata_s {
+    d_set_t *rooms;
+    d_set_t *objs;
+} serverdata_t;
+
 int initlisten(int *sock);
 int handleclient(client_t *cli, eventstack_t *evsk);
 int handshake(int clisock);
+void sendevents(d_set_t *clients, eventstack_t *evsk);
 
 int main(void)
 {
     int servsock, clisock;
     d_set_t *clients;
     client_t *cli;
-    int nfds;
+    int nfds, nframed, i;
     fd_set readfds, readfdbak;
     dword key;
     struct timeval timeout;
@@ -80,6 +86,7 @@ int main(void)
     }
 
     evsk_new(&evsk);
+    nframed = 0;
 
     while(1) {
         FD_ZERO(&readfds);
@@ -92,13 +99,13 @@ int main(void)
             FD_SET(cli->socket, &readfds);
         }
 
-        timeout.tv_sec = 1;
-        timeout.tv_usec = 0;
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 16000;
 
         d_memory_copy(&readfdbak, &readfds, sizeof(readfds));
         while(select(nfds+1, &readfds, NULL, NULL, &timeout) == 0) {
-            timeout.tv_sec = 1;
-            timeout.tv_usec = 0;
+            timeout.tv_sec = 0;
+            timeout.tv_usec = 16000;
             d_memory_copy(&readfds, &readfdbak, sizeof(readfdbak));
         }
 
@@ -120,11 +127,20 @@ int main(void)
         d_set_resetiteration(clients);
         while(key = d_set_nextkey(clients), key != D_SET_INVALIDKEY) {
             d_set_fetch(clients, key, (void **)&cli);
-            if(FD_ISSET(cli->socket, &readfds))
-                if(handleclient(cli, &evsk) == -1) {
+            if(FD_ISSET(cli->socket, &readfds)) {
+                i = handleclient(cli, &evsk);
+                if(i == -1) {
                     close(cli->socket);
                     d_set_remove(clients, key);
+                } else if(i == 1) {
+                    nframed++;
                 }
+            }
+        }
+
+        if(nframed == d_set_nelements(clients)) {
+            sendevents(clients, &evsk);
+            nframed = 0;
         }
     }
 
@@ -132,6 +148,36 @@ int main(void)
     d_set_delete(clients);
 
     exit(EXIT_SUCCESS);
+}
+
+void sendevents(d_set_t *clients, eventstack_t *evsk)
+{
+    event_t ev;
+    client_t *cli;
+    dword key;
+    packet_t p;
+
+    while(evsk_top(evsk, &ev)) {
+        d_set_resetiteration(clients);
+        while(key = d_set_nextkey(clients), key != D_SET_INVALIDKEY) {
+            d_set_fetch(clients, key, (void **)&cli);
+            if(cli->handle != ev.subject) {
+                p.type = PACK_EVENT;
+                p.body.event = ev;
+                writepack(cli->socket, p);
+            }
+        }
+        evsk_pop(evsk);
+    }
+
+    d_set_resetiteration(clients);
+    while(key = d_set_nextkey(clients), key != D_SET_INVALIDKEY) {
+        d_set_fetch(clients, key, (void **)&cli);
+        p.type = PACK_FRAME;
+        writepack(cli->socket, p);
+        cli->state = 2;
+    }
+    return;
 }
 
 int handshake(int clisock)
@@ -199,13 +245,22 @@ int handleclient(client_t *cli, eventstack_t *evsk)
     case 1: /* expect sync */
     case 2: /* events */
         if(p.type == PACK_EVENT) {
-            fprintf(stderr, "Got event from %d [calls itself %d]: %d + ``%s''\n",
-                    cli->handle, p.body.event.subject, p.body.event.verb,
-                    (p.body.event.auxlen)?p.body.event.auxdata:"");
+            if(p.body.event.subject != cli->handle) {
+                fprintf(stderr, "Got event from %d [calls itself %d]: %d + ``%s''\n",
+                        cli->handle, p.body.event.subject, p.body.event.verb,
+                        (p.body.event.auxlen)?p.body.event.auxdata:"");
+            }
             evsk_push(evsk, p.body.event);
-            evsk_pop(evsk);
+        } else if(p.type == PACK_FRAME) {
+            cli->state = 3;
+            return 1; /* return that we're framed */
         }
         break;
+
+    case 3: /* framed */
+        fprintf(stderr, __FUNCTION__": %d broken! should be framed!\n",
+                cli->handle);
+        return -1;
     }
 
     return 0;
