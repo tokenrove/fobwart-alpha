@@ -5,24 +5,61 @@
 
 typedef void nethandle_t;
 
-/* Network related */
-enum { PACK_YEAWHAW = 0, PACK_IRECKON, PACK_AYUP,
-       PACK_LOGIN, PACK_SYNC, PACK_EVENT, PACK_FRAME,
-       PACK_GETOBJECT, PACK_GETROOM, PACK_OBJECT, PACK_ROOM };
+/* Network related constants.
+ * If you change these, please update HACKING */
+enum { PACK_YEAWHAW = 0,	/* server-side handshake */
+       PACK_IRECKON = 1,	/* client-side handshake */
+       PACK_AYUP = 2,		/* general ack packet */
+       PACK_LOGIN = 3,		/* client login request */
+       PACK_SYNC = 4,		/* reserved */
+       PACK_EVENT = 5,		/* packet contains object event */
+       PACK_FRAME = 6,		/* client blocks for event framing */
+       PACK_GETOBJECT = 7,	/* client request for object */
+       PACK_GETROOM = 8,	/* client request for room */
+       PACK_OBJECT = 9,		/* packet contains an object */
+       PACK_ROOM = 10,		/* packet contains a room */
+       PACK_GETRESLIST = 11,	/* client request for resource checksums */
+       PACK_RESLIST = 12,       /* packet contains resource checksums */
+       PACK_GETFILE = 13,	/* client request for updated resource */
+       PACK_FILE = 14		/* packet contains resource file */
+};
 
+
+/* packet_t
+ * Packet structure. */
 typedef struct packet_s {
     byte type;
     union {
         byte handshake;
+
         word handle;
+
         struct {
             string_t name, password;
         } login;
+
         event_t event;
+
         object_t object;
+
         room_t room;
+
+	struct {
+	    word length;
+	    struct {
+		string_t name;
+		dword checksum;
+	    } *res;
+	} reslist;
+
+	struct {
+	    string_t name;
+	    dword length, checksum;
+	    byte *data;
+	} file;
     } body;
 } packet_t;
+
 
 extern bool net_readpack(nethandle_t *, packet_t *p);
 extern bool net_writepack(nethandle_t *, packet_t p);

@@ -8,6 +8,19 @@
  * 
  */
 
+
+#include <dentata/types.h>
+#include <dentata/image.h>
+#include <dentata/sprite.h>
+#include <dentata/tilemap.h>
+#include <dentata/set.h>
+
+#include <dentata/sample.h>
+#include <dentata/s3m.h>
+
+#include <lua.h>
+
+
 #define DATADIR "./data"
 #define DEFFONTFNAME   DATADIR "/def.fnt"
 #define LARGEFONTFNAME DATADIR "/slant.fnt"
@@ -20,11 +33,11 @@ enum { FOBPORT = 6400 };
 /* Event verbs */
 enum {
     VERB_NOP = 0, VERB_TALK, VERB_RIGHT, VERB_LEFT, VERB_UP, VERB_DOWN,
-    VERB_ACT, VERB_AUTO
+    VERB_ACT, VERB_AUTO, VERB_EXIT
 };
 
 /* Other game constants */
-enum { OBJSTACKSIZE = 0, LUAOBJECT_TAG = 0, PHYSSCALE = 256 };
+enum { OBJSTACKSIZE = 0, LUAOBJECT_TAG = 0 };
 
 typedef word objhandle_t;
 typedef word roomhandle_t;
@@ -121,6 +134,9 @@ extern bool evsk_pop(eventstack_t *evsk, event_t *ev);
 
 extern bool string_fromasciiz(string_t *dst, const char *src);
 extern void string_delete(string_t *s);
+
+extern dword checksumfile(const char *name);
+extern void checksuminit(void);
 
 extern d_sprite_t *loadsprite(char *fname);
 extern d_tilemap_t *loadtmap(char *filename);

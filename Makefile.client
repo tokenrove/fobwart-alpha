@@ -4,7 +4,8 @@
 #
 
 CLIOBJS=climain.o local.o decor.o type.o unxaudio.o clinet.o clievent.o \
-        clilua.o db.o data.o network.o gamecore.o lua.o util.o
+        clilua.o db.o data.o network.o gamecore.o lua.o util.o msgbuf.o \
+        clidata.o
 CLIDATA=$(COMMONDATA)
 CLIHEADERS=fobwart.h fobcli.h fobdb.h fobnet.h
 

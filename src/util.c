@@ -5,26 +5,11 @@
  * Various (possibly transitory) helper routines and data structures.
  */
 
-#include <dentata/types.h>
-#include <dentata/image.h>
-#include <dentata/error.h>
-#include <dentata/time.h>
-#include <dentata/raster.h>
-#include <dentata/event.h>
-#include <dentata/font.h>
-#include <dentata/sprite.h>
-#include <dentata/tilemap.h>
-#include <dentata/manager.h>
-#include <dentata/sample.h>
-#include <dentata/audio.h>
-#include <dentata/s3m.h>
-#include <dentata/set.h>
-#include <dentata/color.h>
-#include <dentata/memory.h>
-
-#include <lua.h>
 
 #include "fobwart.h"
+
+#include <dentata/memory.h>
+#include <dentata/file.h>
 
 
 void evsk_new(eventstack_t *evsk);
@@ -35,6 +20,9 @@ bool evsk_pop(eventstack_t *evsk, event_t *ev);
 
 bool string_fromasciiz(string_t *dst, const char *src);
 void string_delete(string_t *s);
+
+dword checksumfile(const char *name);
+void checksuminit(void);
 
 
 void evsk_new(eventstack_t *evsk)
@@ -117,6 +105,50 @@ void string_delete(string_t *s)
     s->data = NULL;
     s->len = 0;
     return;
+}
+
+
+#define CRCMAGIC 0x04C11DB7
+
+static dword crctable[256];
+
+void checksuminit(void)
+{
+    int i, j;
+    dword c;
+
+    for(i = 0; i < 256; i++) {
+        for(c = (i<<24), j = 8; j > 0; j--) {
+            c = (c & 0x80000000) ? ((c << 1) ^ CRCMAGIC) : (c << 1);
+        }
+        crctable[i] = c;
+    }
+    return;
+}
+
+
+#define CRCBUFLEN 4096
+
+dword checksumfile(const char *name)
+{
+    d_file_t *file;
+    dword sum, len, i;
+    byte data[CRCBUFLEN];
+
+    file = d_file_open(name);
+    if(!file) return 0;
+
+    sum = 0xFFFFFFFFL;
+
+    while(len = d_file_read(file, data, CRCBUFLEN), len > 0) {
+	i = 0;
+	while(len--)
+	    sum = crctable[((sum>>24)^data[i++])&0xFF] ^ (sum << 8);
+    }
+
+    d_file_close(file);
+
+    return sum^0xFFFFFFFFL;
 }
 
 /* EOF util.c */

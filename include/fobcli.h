@@ -8,9 +8,12 @@
  * 
  */
 
+#include <dentata/font.h>
+
 /* Various constants */
 enum {
-    IDEALWIDTH = 320, IDEALHEIGHT = 240, IDEALBPP = 8, TARGETFPS = 60,
+    IDEALWIDTH = 320, IDEALHEIGHT = 240, IDEALBPP = 8, TARGETFPS = 30,
+    MSGBUF_SIZE = 100,
 
     EV_QUIT = 0, EV_LEFT = 1, EV_RIGHT = 2, EV_UP = 3, EV_DOWN = 4,
     EV_ACT = 5, EV_JUMP = 6, EV_TALK = 7,
@@ -21,6 +24,16 @@ enum {
 
 #define LOGINPROMPT ((byte *)"login: ")
 #define PASSPROMPT  ((byte *)"password: ")
+
+
+typedef struct msgbufline_s {
+    string_t line;
+    struct msgbufline_s *next, *prev;
+} msgbufline_t;
+
+typedef struct msgbuf_s {
+    msgbufline_t *head, *current, *bottom;
+} msgbuf_t;
 
 
 typedef struct gamedata_s {
@@ -45,6 +58,8 @@ typedef struct gamedata_s {
     int readycount;
     eventstack_t evsk;
 
+    msgbuf_t msgbuf;
+
     /* room data */
     d_palette_t light, dark, *curpalette;
 
@@ -68,5 +83,11 @@ extern void destroydata(gamedata_t *gd);
 
 extern bool getobject(gamedata_t *gd, word handle);
 extern bool getroom(gamedata_t *gd, word handle);
+
+extern void setluamsgbuf(msgbuf_t *mb);
+
+extern void msgbuf_init(msgbuf_t *mb, int size);
+extern void msgbuf_destroy(msgbuf_t *mb);
+
 
 /* EOF fobclient.h */

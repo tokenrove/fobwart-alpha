@@ -1,6 +1,11 @@
+Fobwart hacking guide
+Julian Squires <tek@wiw.org> / 2001
+
+
 
 CONTENTS
 --------
+
 
 GENERAL
 CODING GUIDELINES
@@ -8,10 +13,13 @@ SOURCE STRUCTURE
 TODO
 SCRIPTING
 PROTOCOL
+IMPLEMENTATION NOTES
+
 
 
 GENERAL
 -------
+
 
 The general design here is very client-heavy, for a few reasons. We
 wanted to minimize the amount of network activity while maintaining
@@ -22,8 +30,10 @@ events deterministically, so state has to be very carefully tracked
 and synchronized.
 
 
+
 CODING GUIDELINES
 -----------------
+
 
 The indentation style is basically 4-space K&R. Please use spaces
 instead of tabs.
@@ -34,8 +44,10 @@ routine uses standard library features which are not present in
 dentata.
 
 
+
 SOURCE STRUCTURE
 ----------------
+
 
 Currently, the code for the server, the client, and some of the
 utilities is distributed in one group, so as to make the most
@@ -51,24 +63,43 @@ Common modules:
  src/network.c	-- Low-level and common networking routines.
  src/util.c	-- Various helper routines and data structures.
 
+Client modules:
+ src/clievent.c -- obtain{object,room} implemenation. (see gamecore.c)
+ src/clilua.c   -- Client-specific Lua routine implementation. (talklua,
+                   setluaenv, setluamsgbuf)
+ src/climain.c  -- Client main body. (main, game loop, login loop)
+ src/clidata.c  -- Code to do resource sync/data load for the client.
+
+Server modules:
+ src/servevnt.c -- obtain{object,room} implemenation. (see gamecore.c)
+ src/servlua.c  -- Server-specific Lua routine implementation. (talklua,
+                   setluaenv)
+
+
+
 
 TODO
 ----
 
+
 Bugs:
- 1) Hang (probably in server) when a character jumps off screen.
+ 1) Hang (probably in server) when a character jumps off the level... seems
+    to be fixed after integration of pumpkin physics code, but could
+    come back and bite us.
 
 Features:
 
  Ordered:
- 3) Add ``really quit?'' dialog if escape is hit.
- 4) Bring back messagebuf.
+ 3) Server resource sync.
+ 4) Dual-worlds system.
  6) Add server controls (at the very least, reload when SIGHUP'd)
+ 7) Add ``really quit?'' dialog if escape is hit.
  Make-or-break:
  - room transitions
- - tile scripting (collide and normal)
- - bring back messagebuf
+ - object collide scripting
+ - online tilemap editor, script editor
  Important:
+ - tile scripting (collide and normal)
  - modularize decor/windowing code, so that dialogs can be more easily
  created
  - develop tools for profiling network usage
@@ -82,8 +113,10 @@ Features:
  - login loop with reconnect, server and port fields
 
 
+
 SCRIPTING
 ---------
+
 
 Scripting is done in Lua. There are scripts for each object, as well
 as a default script with stub functions called ``defobj.luc''. Before
@@ -113,6 +146,11 @@ ________________|_______|_______________________________________________
 PROTOCOL
 --------
 
+
+The protocol currently works on top of TCP, which has yet to prove itself
+a serious bottleneck. The default fobwart port is currently 6400/tcp.
+
+
 Packet format:
 ________________________________________________________________________
 Offset	| Length| Description
@@ -137,4 +175,122 @@ PACK_GETOBJECT	| 7	| Request for object
 PACK_GETROOM	| 8	| Request for room
 PACK_OBJECT	| 9	| Packet contains an object
 PACK_ROOM	| 10	| Packet contains a room
+PACK_GETRESLIST | 11    | Sent by client to request resource checksums
+PACK_RESLIST    | 12    | Packet contains resource checksum list
+PACK_GETFILE    | 13    | Sent by client to request a resource file
+PACK_FILE       | 14    | Packet contains resource file
 ________________|_______|_______________________________________________
+
+
+Packet details:
+
+PACK_YEAHHAW
+________________________________________________________________________
+Offset	| Length| Description
+________|_______|_______________________________________________________
+0	| 1	| Packet type (0)
+1	| 1	| Handshake (arbitrary value)
+________|_______|_______________________________________________________
+
+This is the first packet sent after the server accepts. It expects
+PACK_IRECKON as the response. The handshake value is somewhat
+arbitrary. One imagines that it will eventually represent the current
+server version.
+
+
+PACK_IRECKON
+________________________________________________________________________
+Offset	| Length| Description
+________|_______|_______________________________________________________
+0	| 1	| Packet type (1)
+1	| 1	| Handshake (arbitrary value)
+________|_______|_______________________________________________________
+
+This packet is sent by the client in response to PACK_YEAHHAW.
+
+
+PACK_AYUP
+PACK_GETOBJECT
+PACK_GETROOM
+________________________________________________________________________
+Offset	| Length| Description
+________|_______|_______________________________________________________
+0	| 1	| Packet type (2,7,8 respectively)
+1	| 2	| Handle
+________|_______|_______________________________________________________
+
+PACK_AYUP is sent after a successful login, and perhaps in other
+situations as well?
+
+PACK_GETOBJECT and PACK_GETROOM are sent by the client upon
+discovering that it doesn't have the data for some object or room
+which it might need. It expects the server's next response to be
+PACK_OBJECT or PACK_ROOM, respectively.
+
+
+PACK_LOGIN
+________________________________________________________________________
+Offset	| Length| Description
+________|_______|_______________________________________________________
+0	| 1	| Packet type (3)
+1	| 2	| Length of user name
+3	| x	| User name
+3+x	| 2	| Length of password
+5+x	| y	| Password
+________|_______|_______________________________________________________
+
+This packet is sent by the client when requesting access to a specific
+user. The password is sent unencrypted. This is just a game, after
+all. The expected server response is PACK_AYUP on successful login,
+with the handle of the user's player in its body. Failed logins
+currently result in the connection being immediately reset.
+
+
+PACK_EVENT
+________________________________________________________________________
+Offset	| Length| Description
+________|_______|_______________________________________________________
+0	| 1	| Packet type (5)
+1	| 2	| Subject (objhandle_t)
+3	| 1	| Verb (see verb list)
+4	| 2	| Length of auxillary data
+6	| x	| Auxillary data (dependant on verb)
+________|_______|_______________________________________________________
+
+This packet, when sent by the client, indicates that the client's
+player is doing the specified action. The subject must be the same as
+the handle of the client's player, or the packet will be ignored. If
+this is sent by the server, it represents an authoritative action from
+the specified subject.
+
+
+
+PACK_FRAME
+________________________________________________________________________
+Offset	| Length| Description
+________|_______|_______________________________________________________
+0	| 1	| Packet type (6)
+________|_______|_______________________________________________________
+
+
+
+IMPLEMENTATION NOTES
+--------------------
+
+
+Resource Synchronization:
+
+Whenever a client connects, they:
+	- request the current resource list from the server
+	- compare the checksums on the list to their local copies
+	- request from the server any files that don't match or don't
+	  exist
+
+When the server starts, it generates the resource list and its
+checksums. These are recomputed on server reload.
+
+Files are currently simply sent wholesale in a TCP stream, and we don't
+worry too much. I doubt this will change any time soon.
+
+The checksum used is CRC-32 with 0x04C11DB7 as the polynomial, which I
+believe is used by ethernet, FDDI, and others.

@@ -147,6 +147,17 @@ void handleinput(gamedata_t *gd)
     int i;
     event_t ev;
 
+    /* Message buffer scrolling. */
+    if(d_event_ispressed(EV_PAGEDOWN) && !gd->bounce[EV_PAGEDOWN] &&
+	gd->msgbuf.current->next != gd->msgbuf.bottom) {
+	gd->msgbuf.current = gd->msgbuf.current->next;
+    }
+
+    if(d_event_ispressed(EV_PAGEUP) && !gd->bounce[EV_PAGEUP] &&
+	gd->msgbuf.current != gd->msgbuf.head) {
+	gd->msgbuf.current = gd->msgbuf.current->prev;
+    }
+
     switch(gd->evmode) {
     case gameinput:
         handlegameinput(gd);

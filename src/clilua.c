@@ -4,33 +4,28 @@
  */
 
 
-#include <dentata/types.h>
-#include <dentata/image.h>
-#include <dentata/error.h>
-#include <dentata/time.h>
-#include <dentata/raster.h>
-#include <dentata/event.h>
-#include <dentata/font.h>
-#include <dentata/sprite.h>
-#include <dentata/tilemap.h>
-#include <dentata/manager.h>
-#include <dentata/sample.h>
-#include <dentata/audio.h>
-#include <dentata/memory.h>
-#include <dentata/s3m.h>
-#include <dentata/set.h>
-#include <dentata/random.h>
-#include <dentata/util.h>
-
-#include <lua.h>
-
 #include "fobwart.h"
+#include "fobnet.h"
+#include "fobcli.h"
 
 
 void setluaenv(lua_State *L);
 int talklua(lua_State *L);
+void setluamsgbuf(msgbuf_t *mb);
 
 extern int typelua(lua_State *L);
+
+
+/* Yuck! That slime mold must have been rotten! */
+static msgbuf_t *msgbuf;
+
+
+void setluamsgbuf(msgbuf_t *mb)
+{
+    msgbuf = mb;
+    return;
+}
+
 
 void setluaenv(lua_State *L)
 {
@@ -50,7 +45,14 @@ int talklua(lua_State *L)
 
     s = lua_tostring(L, -1);
     lua_pop(L, 1);
-    d_error_debug("%s\n", s);
+    string_delete(&msgbuf->bottom->line);
+    string_fromasciiz(&msgbuf->bottom->line, s);
+    /* Note: this behavior might get annoying for people trying to
+       read scrollback... consider a framing method instead. */
+    msgbuf->current = msgbuf->current->next;
+    msgbuf->bottom = msgbuf->bottom->next;
+    if(msgbuf->bottom == msgbuf->head)
+	msgbuf->head = msgbuf->head->next;
     return 0;
 }
 

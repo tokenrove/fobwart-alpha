@@ -32,12 +32,15 @@
 #include "fobcli.h"
 
 
+/* getobject
+ * Requests and loads an object */
 bool getobject(gamedata_t *gd, word handle)
 {
     bool status;
     object_t *o;
     packet_t p;
 
+    /* Send out a getobject packet, expect an object packet back. */
     d_error_debug("Added %d\n", handle);
     p.type = PACK_GETOBJECT;
     p.body.handle = handle;
@@ -69,6 +72,8 @@ bool getobject(gamedata_t *gd, word handle)
 }
 
 
+/* getroom
+ * Requests and loads a room from the server. */
 bool getroom(gamedata_t *gd, word handle)
 {
     bool status;

@@ -76,6 +76,10 @@ int main(int argc, char **argv)
 
     setluaworldstate(&gd.ws);
 
+    /* initialize message buffer */
+    msgbuf_init(&gd.msgbuf, MSGBUF_SIZE);
+    setluamsgbuf(&gd.msgbuf);
+
     /* load data from server */
     status = loaddata(&gd);
     if(status != success) {
@@ -88,17 +92,34 @@ int main(int argc, char **argv)
     if(status != success)
         return 0;
 
+    /* Initialize manager */
+    status = d_manager_new();
+    if(status == failure)
+        return failure;
+
+    d_manager_setscrollparameters(true, 0);
+
     /* enter main loop */
     mainloop(&gd);
 
     /* close connection */
+    net_close(gd.nh);
+
     /* deinit local */
     evsk_delete(&gd.evsk);
     deinitlocal(&gd);
-    net_close(gd.nh);
+
+    /* blow up the outside world */
     destroydata(&gd);
     destroyworldstate(&gd.ws);
+
+    /* destroy msgbuf 
+    msgbuf_destroy(&gd.msgbuf);
+    */
+
+    /* dump any extra errors. */
     d_error_dump();
+
     return 0;
 }
 
@@ -410,72 +431,30 @@ void cameramanage(gamedata_t *gd, object_t *player)
 void updatetext(gamedata_t *gd)
 {
     d_point_t pt;
+    msgbufline_t *p;
 
     /* update text */
     pt.y = 202; pt.x = 2;
     if(gd->evmode == textinput) {
-        if(gd->type.buf)
+	if(gd->type.buf) {
+	    gd->type.buf[gd->type.pos] = 0;
             d_font_printf(gd->raster, gd->deffont, pt, (byte *)
                           gd->type.buf);
+	}
         pt.x = 2+gd->type.pos*gd->deffont->desc.w;
         d_font_printf(gd->raster, gd->deffont, pt, (byte *)"\x10");
     }
-    
-    return;
-}
 
+    pt.x = 2; pt.y += gd->deffont->desc.h+1;
+    for(p = gd->msgbuf.current; p->line.data && p != gd->msgbuf.bottom &&
+	    pt.y < gd->raster->desc.h-gd->deffont->desc.h+1; p = p->next) {
+	d_font_printf(gd->raster, gd->deffont, pt, (byte *)"%s", p->line.data);
 
-bool loaddata(gamedata_t *gd)
-{
-    bool status;
-
-    gd->deffont = d_font_load(DEFFONTFNAME);
-    if(gd->deffont == NULL) return failure;
-    gd->largefont = d_font_load(LARGEFONTFNAME);
-    if(gd->largefont == NULL) return failure;
-    d_font_convertdepth(gd->deffont, gd->raster->desc.bpp);
-    d_font_convertdepth(gd->largefont, gd->raster->desc.bpp);
-
-    /* load palette */
-    loadpalette(LIGHTPALFNAME, &gd->light);
-    loadpalette(DARKPALFNAME, &gd->dark);
-    d_memory_copy(&gd->raster->palette, &gd->light,
-                  D_NCLUTITEMS*D_BYTESPERCOLOR);
-
-    d_font_silhouette(gd->largefont,
-                      d_color_fromrgb(gd->raster, 255, 255, 255),
-                      255);
-    d_font_silhouette(gd->deffont, d_color_fromrgb(gd->raster, 0, 0, 15),
-                      255);
-
-    status = d_manager_new();
-    if(status == failure)
-        return failure;
-
-    d_manager_setscrollparameters(true, 0);
-
-    gd->ebar = ebar_new(gd->raster);
-
-    if(gd->hasaudio) {
-        gd->cursong = d_s3m_load(DATADIR "/mm2.s3m");
+	pt.y += gd->deffont->desc.h+1;
     }
-    return success;
-}
 
-
-void destroydata(gamedata_t *gd)
-{
-    if(gd->hasaudio)
-        d_s3m_delete(gd->cursong);
-
-    d_image_delete(gd->ebar);
-    d_manager_delete();
-
-    d_font_delete(gd->largefont);
-    gd->largefont = NULL;
-    d_font_delete(gd->deffont);
-    gd->deffont = NULL;
     return;
 }
+
 
 /* EOF climain.c */
