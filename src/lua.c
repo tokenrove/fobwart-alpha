@@ -224,11 +224,9 @@ int setcuranimlua(lua_State *L)
     lua_pop(L, 2);
 
     p = d_sprite_getcurframe(o->sprite);
-    oldw = p->desc.w;
     oldh = p->desc.h;
     d_sprite_setcuranim(o->sprite, anim);
     p = d_sprite_getcurframe(o->sprite);
-    o->x += oldw-p->desc.w;
     o->y += oldh-p->desc.h;
     return 0;
 }

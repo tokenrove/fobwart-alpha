@@ -219,6 +219,8 @@ void mainloop(gamedata_t *gd)
         d_error_debug("ack. couldn't fetch localobj!\n");
         return;
     }
+    getroom(gd, o->location);
+
     gd->type.pos = 0;
     gd->type.nalloc = 0;
     gd->type.buf = NULL;
@@ -249,6 +251,10 @@ void mainloop(gamedata_t *gd)
         updatephysics(&gd->ws);
 
         /* update manager/graphics */
+        if(d_set_fetch(gd->ws.objs, gd->localobj, (void **)&o) != success) {
+            d_error_debug("ack. couldn't fetch localobj!\n");
+            return;
+        }
         updatemanager(gd, o);
         /* update decor */
         updatedecor(gd, o);

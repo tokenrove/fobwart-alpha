@@ -98,12 +98,27 @@ bool getroom(gamedata_t *gd, word handle)
 
     d_manager_wipelayers();
     d_manager_wipesprites();
+
+    d_iterator_reset(&it);
+    while(key = d_set_nextkey(&it, gd->ws.objs), key != D_SET_INVALIDKEY) {
+        d_set_fetch(gd->ws.objs, key, (void **)&o);
+        d_set_remove(gd->ws.objs, key);
+        lua_close(o->luastate);
+        d_sprite_delete(o->sprite);
+        d_memory_delete(o);
+        d_iterator_reset(&it);
+    }
+
+    d_error_debug("Loading room contents\n");
     d_iterator_reset(&it);
     while(key = d_set_nextkey(&it, room->contents), key != D_SET_INVALIDKEY) {
-        d_set_fetch(gd->ws.objs, key, (void **)&o);
-        if(o->location == room->handle)
-            d_manager_addsprite(o->sprite, &o->sphandle, 0);
+        d_error_debug("Getting object %d\n", key);
+        if(getobject(gd, key) == failure) return failure;
+        d_error_debug("Double checking fetch for object %d\n", key);
+        if(d_set_fetch(gd->ws.objs, key, (void **)&o) == failure)
+            return failure;
     }
+    d_error_debug("Finished loading room contents\n");
     status = d_manager_addimagelayer(room->bg, &room->bghandle, -1);
     if(status == failure) return failure;
 

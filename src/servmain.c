@@ -159,9 +159,10 @@ void mainloop(serverdata_t *sd)
                 evsk_push(&sd->evsk, ev);
             }
 
+            sendevents(sd);
             processevents(&sd->evsk, (void *)sd);
             updatephysics(&sd->ws);
-            sendevents(sd);
+            while(evsk_pop(&sd->evsk, NULL));
             nframed = 0;
         }
     }
@@ -180,8 +181,11 @@ void sendevents(serverdata_t *sd)
     object_t *o;
     roomhandle_t room;
     d_iterator_t it;
+    int i;
 
-    while(evsk_pop(&sd->evsk, &ev)) {
+    for(i = 0; i < sd->evsk.top; i++) {
+        ev = sd->evsk.events[i];
+
         if(d_set_fetch(sd->ws.objs, ev.subject, (void **)&o))
             room = o->location;
         else
