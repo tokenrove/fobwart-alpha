@@ -35,6 +35,12 @@ typedef struct msgbuf_s {
     msgbufline_t *head, *current, *bottom;
 } msgbuf_t;
 
+struct gamedata_s;
+
+typedef struct widget_s {
+    bool (*input)(struct gamedata_s *);
+    void (*update)(struct gamedata_s *);
+} widget_t;
 
 typedef struct gamedata_s {
     d_image_t *raster;
@@ -56,9 +62,11 @@ typedef struct gamedata_s {
     enum {gameinput = 0, textinput = 1} evmode;
     int quitcount;
     int readycount;
-    eventstack_t evsk;
 
     msgbuf_t msgbuf;
+
+    int nwidgets;
+    widget_t *widgets;
 
     /* room data */
     d_palette_t light, dark, *curpalette;
@@ -74,20 +82,28 @@ typedef struct gamedata_s {
 } gamedata_t;
 
 
+/* local.c */
 extern bool initlocal(gamedata_t *gd);
 extern void deinitlocal(gamedata_t *gd);
 extern void handleinput(gamedata_t *gd);
 
+/* clidata.c */
 extern bool loaddata(gamedata_t *gd);
 extern void destroydata(gamedata_t *gd);
 
+/* clinet.c */
 extern bool getobject(gamedata_t *gd, word handle);
 extern bool getroom(gamedata_t *gd, word handle);
 
+/* clilua.c */
 extern void setluamsgbuf(msgbuf_t *mb);
 
+/* msgbuf.c */
 extern void msgbuf_init(msgbuf_t *mb, int size);
 extern void msgbuf_destroy(msgbuf_t *mb);
 
+/* clilogin.c */
+extern bool loginloop(gamedata_t *gd);
+extern bool loginscreen(gamedata_t *gd, char **uname, char **password);
 
 /* EOF fobclient.h */

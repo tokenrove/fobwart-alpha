@@ -35,6 +35,8 @@ bool freezestate(lua_State *L, byte **data, dword *len);
 bool meltstate(lua_State *L, char *data);
 
 int setcuranimlua(lua_State *L);
+int animhasloopedlua(lua_State *L);
+int pushverblua(lua_State *L);
 int setobjectlua(lua_State *L);
 int getobjectlua(lua_State *L);
 int typelua(lua_State *L);
@@ -219,8 +221,8 @@ int setcuranimlua(lua_State *L)
     d_image_t *p;
     word oldh;
 
-    o = lua_touserdata(L, -2);
-    anim = lua_tonumber(L, -1);
+    o = lua_touserdata(L, 1);
+    anim = lua_tonumber(L, 2);
     lua_pop(L, 2);
 
     p = d_sprite_getcurframe(o->sprite);
@@ -231,6 +233,47 @@ int setcuranimlua(lua_State *L)
         o->y += oldh-p->desc.h;
     else
         o->y -= p->desc.h-oldh;
+    return 0;
+}
+
+
+int animhasloopedlua(lua_State *L)
+{
+    object_t *o;
+
+    o = lua_touserdata(L, 1);
+    lua_pop(L, 1);
+    lua_pushnumber(L, d_sprite_haslooped(o->sprite));
+    return 1;
+}
+
+
+int pushverblua(lua_State *L)
+{
+    event_t ev;
+    word w;
+    byte b;
+
+    ev.subject = lua_tonumber(L, 1);
+    ev.verb = lua_tonumber(L, 2);
+
+    if(ev.verb == VERB_TALK) {
+	ev.auxlen = lua_strlen(L, 3)+1;
+	ev.auxdata = d_memory_new(ev.auxlen);
+	d_memory_copy(ev.auxdata, lua_tostring(L, 3), ev.auxlen);
+    } else if(ev.verb == VERB_ACT) {
+	ev.auxlen = 1;
+	ev.auxdata = d_memory_new(1);
+	b = lua_tonumber(L, 3);
+	d_memory_copy(&ev.auxdata, &b, 1);
+    } else if(ev.verb == VERB_EXIT) {
+	ev.auxlen = 2;
+	ev.auxdata = d_memory_new(2);
+	w = lua_tonumber(L, 3);
+	d_memory_copy(&ev.auxdata, &w, 2);
+    }
+    evsk_push(&ws->evsk, ev);
+
     return 0;
 }
 

@@ -44,6 +44,7 @@
 
 bool obtainobject(void *obdat_, objhandle_t handle, object_t **o);
 bool obtainroom(void *obdat_, roomhandle_t handle, room_t **room);
+void exitobject(void *obdat_, objhandle_t subject, roomhandle_t location);
 
 
 bool obtainobject(void *obdat_, objhandle_t handle, object_t **o)
@@ -63,6 +64,39 @@ bool obtainroom(void *obdat_, roomhandle_t handle, room_t **room)
 
     status = d_set_fetch(sd->ws.rooms, handle, (void **)room);
     return status;
+}
+
+
+void exitobject(void *obdat_, objhandle_t subject, roomhandle_t location)
+{
+    serverdata_t *sd = obdat_;
+    object_t *o;
+    room_t *room;
+    d_image_t *im;
+
+    d_set_fetch(sd->ws.objs, subject, (void **)&o);
+    d_set_fetch(sd->ws.rooms, o->location, (void **)&room);
+    d_set_remove(room->contents, subject);
+    o->location = location;
+    d_set_fetch(sd->ws.rooms, o->location, (void **)&room);
+    d_set_add(room->contents, subject, NULL);
+    im = d_sprite_getcurframe(o->sprite);
+
+    if(o->y+im->desc.h >= room->map->h*room->map->tiledesc.h-1 &&
+       o->vy > 0) {
+	o->y = 0;
+
+    } else if(o->y <= room->map->tiledesc.h && o->vy < 0) {
+	o->y = room->map->h*room->map->tiledesc.h-im->desc.h-1;
+
+    } else if(o->x+im->desc.w >= room->map->w*room->map->tiledesc.w-1 &&
+	      o->vx > 0) {
+	o->x = 0;
+
+    } else if(o->x <= room->map->tiledesc.w && o->vx < 0) {
+	o->x = room->map->w*room->map->tiledesc.w-im->desc.w-1;
+    }
+    return;
 }
 
 /* EOF eventserv.c */

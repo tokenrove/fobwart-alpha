@@ -15,6 +15,7 @@
 void evsk_new(eventstack_t *evsk);
 void evsk_delete(eventstack_t *evsk);
 void evsk_push(eventstack_t *evsk, event_t ev);
+void evsk_pushtop(eventstack_t *evsk, event_t ev);
 bool evsk_top(eventstack_t *evsk, event_t *ev);
 bool evsk_pop(eventstack_t *evsk, event_t *ev);
 
@@ -23,6 +24,9 @@ void string_delete(string_t *s);
 
 dword checksumfile(const char *name);
 void checksuminit(void);
+
+void reslist_add(reslist_t *reslist, char *dir, char *name, char *ext);
+void reslist_delete(reslist_t *reslist);
 
 
 void evsk_new(eventstack_t *evsk)
@@ -51,6 +55,21 @@ void evsk_push(eventstack_t *evsk, event_t ev)
                                        evsk->nalloc*sizeof(event_t));
     }
     evsk->events[evsk->top-1] = ev;
+    return;
+}
+
+
+void evsk_pushtop(eventstack_t *evsk, event_t ev)
+{
+    evsk->top++;
+    if(evsk->top == evsk->nalloc) {
+        evsk->nalloc *= 2;
+        evsk->events = d_memory_resize(evsk->events,
+                                       evsk->nalloc*sizeof(event_t));
+    }
+    d_memory_move(&evsk->events[1], &evsk->events[0],
+		  evsk->top*sizeof(event_t));
+    evsk->events[0] = ev;
     return;
 }
 
@@ -150,5 +169,46 @@ dword checksumfile(const char *name)
 
     return sum^0xFFFFFFFFL;
 }
+
+
+#include <stdio.h>
+#include <string.h>
+
+
+void reslist_add(reslist_t *reslist, char *dir, char *name, char *ext)
+{
+    char *filename;
+
+    filename = d_memory_new(strlen(dir)+1+strlen(name)+strlen(ext)+1);
+    filename[0] = 0;
+    strcat(filename, dir);
+    strcat(filename, "/");
+    strcat(filename, name);
+    strcat(filename, ext);
+
+    reslist->length++;
+    reslist->name = d_memory_resize(reslist->name,
+				    reslist->length*sizeof(string_t));
+    reslist->checksum = d_memory_resize(reslist->checksum,
+					reslist->length*sizeof(dword));
+    reslist->name[reslist->length-1].data = (byte *)filename;
+    reslist->name[reslist->length-1].len = strlen(filename)+1;
+    reslist->checksum[reslist->length-1] = checksumfile(filename);
+
+    return;
+}
+
+
+void reslist_delete(reslist_t *reslist)
+{
+    int i;
+
+    for(i = 0; i < reslist->length; i++)
+	string_delete(&reslist->name[i]);
+    d_memory_delete(reslist->name);
+    d_memory_delete(reslist->checksum);
+    return;
+}
+
 
 /* EOF util.c */

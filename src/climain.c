@@ -30,83 +30,55 @@
 #include "fobcli.h"
 
 
-void mainloop(gamedata_t *gd);
-bool loginloop(gamedata_t *gd);
-bool loginscreen(gamedata_t *gd, char **uname, char **password);
+int gameloop(gamedata_t *gd);
+bool clientinit(gamedata_t *gd, char *server, int port);
 void updatedecor(gamedata_t *gd, object_t *player);
 void updatemanager(gamedata_t *gd, object_t *o);
 void cameramanage(gamedata_t *gd, object_t *player);
 void updatetext(gamedata_t *gd);
 void updategreeting(gamedata_t *gd, char *greeting);
-bool loaddata(gamedata_t *gd);
-void destroydata(gamedata_t *gd);
 
 
 int main(int argc, char **argv)
 {
     gamedata_t gd;
     bool status;
+    int mode;
     char *server = "localhost";
 
     if(argc > 1)
         server = argv[1];
 
-    /* initialize network */
-    status = net_newclient(&gd.nh, server, FOBPORT);
-    if(status == failure) {
-        d_error_fatal("Network init failed.\n");
-        return 1;
-    }
-
-    /* initialize local */
-    status = initlocal(&gd);
-    if(status == failure) {
-        d_error_fatal("Local init failed.\n");
-        return 1;
-    }
-
-    evsk_new(&gd.evsk);
-
-    /* setup a clean world state */
-    status = initworldstate(&gd.ws);
-    if(status != success) {
-        d_error_fatal("Worldstate init failed.\n");
-        return 1;
-    }
-
-    setluaworldstate(&gd.ws);
-
-    /* initialize message buffer */
-    msgbuf_init(&gd.msgbuf, MSGBUF_SIZE);
-    setluamsgbuf(&gd.msgbuf);
-
-    /* load data from server */
-    status = loaddata(&gd);
-    if(status != success) {
-        d_error_fatal("Data load failed.\n");
-        return 1;
-    }
+    if(clientinit(&gd, server, FOBPORT) != success)
+	return 1;
 
     /* login */
     status = loginloop(&gd);
     if(status != success)
-        return 0;
+        return 1;
 
-    /* Initialize manager */
-    status = d_manager_new();
-    if(status == failure)
-        return failure;
-
-    d_manager_setscrollparameters(true, 0);
 
     /* enter main loop */
-    mainloop(&gd);
+    mode = 0;
+    while(mode != -1) {
+	switch(mode) {
+	case 0:
+	    mode = gameloop(&gd);
+	    break;
+
+	default:
+	    d_error_debug(__FUNCTION__": Unknown mode.\n");
+	    mode = -1;
+	    break;
+	}
+    }
+
 
     /* close connection */
     net_close(gd.nh);
 
     /* deinit local */
-    evsk_delete(&gd.evsk);
+    evsk_delete(&gd.ws.evsk);
     deinitlocal(&gd);
 
     /* blow up the outside world */
@@ -124,154 +96,61 @@ int main(int argc, char **argv)
 }
 
 
-/* loginloop
- * loops around loginscreen and net_login. (alright, not really.
- * to do that, it would have to re-establish a connection with the
- * server every time a login fails. maybe add a servername field
- * in the loginscreen?) */
-bool loginloop(gamedata_t *gd)
+bool clientinit(gamedata_t *gd, char *server, int port)
 {
-    char *uname = "", *password = "";
     bool status;
 
-    status = loginscreen(gd, &uname, &password);
-    if(status != success)
-	return status;
-
-    status = net_login(gd->nh, uname, password, &gd->localobj);
-    return status;
-}
-
-
-/* loginscreen
- * displays a login screen and prompts the user for their name and
- * password.
- * FIXMEs: full of magic numbers. */
-bool loginscreen(gamedata_t *gd, char **uname, char **password)
-{
-    /* Note: This will perhaps in the future be read from the server. */
-    char *motd[4] = { "fobwart alpha-zero",
-                      "Copyright 2001 by Daniel Barnes and ",
-                      "                  Julian Squires.",
-                      NULL, };
-    d_point_t pt;
-    d_rect_t r;
-    int i, onfield;
-    d_font_t *lshadow;
-    char *field;
-
-    /* Setup a palette and a shadow font. */
-    d_raster_setpalette(&gd->raster->palette);
-    lshadow = d_font_dup(gd->largefont);
-    d_font_silhouette(lshadow, d_color_fromrgb(gd->raster, 0, 0, 0), 255);
-    onfield = 0;
-
-    while(1) {
-	/* handle events */
-        d_event_update();
-	/* the user chose to escape. */
-	if(d_event_ispressed(EV_QUIT))
-	    return failure;
-
-        i = handletextinput(&gd->type, gd->bounce);
-        if(i == 1) {
-            if(gd->type.pos > 0) {
-                field = d_memory_new(gd->type.pos+1);
-                d_memory_copy(field, gd->type.buf, gd->type.pos+1);
-                d_memory_set(gd->type.buf, 0, gd->type.nalloc);
-                gd->type.pos = 0;
-                if(onfield == 0) {
-                    *uname = field;
-                    onfield++;
-                } else if(onfield == 1) {
-                    *password = field;
-                    break;
-                }
-            }
-        }
-
-	/* display the cute mm2 screen decorations. */
-        decor_ll_mm2screen(gd->raster);
-
-	/* display the login prompt with mm2 window decor. */
-        r.offset.x = 0; r.w = gd->raster->desc.w;
-        r.offset.y = 10; r.h = gd->largefont->desc.h+4;
-        decor_ll_mm2window(gd->raster, r);
-
-        pt.x = 6;
-        pt.y = r.offset.y+4;
-        d_font_printf(gd->raster, lshadow, pt, LOGINPROMPT);
-        pt.x--; pt.y--;
-        d_font_printf(gd->raster, gd->largefont, pt, LOGINPROMPT);
-        pt.x += d_font_gettextwidth(gd->largefont, LOGINPROMPT);
-        pt.y += (gd->largefont->desc.h-gd->deffont->desc.h)/2;
-
-        if(onfield == 0) {
-	    /* display the field currently being edited */
-            if(gd->type.buf) {
-		/* clip the field at the cursor position */
-		gd->type.buf[gd->type.pos] = 0;
-                d_font_printf(gd->raster, gd->deffont, pt, (byte *)"%s",
-                              gd->type.buf);
-	    }
-	    /* plot the cursor */
-            pt.x += gd->type.pos*gd->deffont->desc.w;
-            d_font_printf(gd->raster, gd->deffont, pt, (byte *)"\x10");
-        } else
-            d_font_printf(gd->raster, gd->deffont, pt, (byte *)"%s", *uname);
-
-	/* display the password prompt with mm2-style window. */
-        r.offset.x = 0; r.w = gd->raster->desc.w;
-        r.offset.y += r.h+10; r.h = gd->largefont->desc.h+4;
-        decor_ll_mm2window(gd->raster, r);
-
-        pt.x = 6;
-        pt.y = r.offset.y+4;
-        d_font_printf(gd->raster, lshadow, pt, PASSPROMPT);
-        pt.x--; pt.y--;
-        d_font_printf(gd->raster, gd->largefont, pt, PASSPROMPT);
-        pt.x += d_font_gettextwidth(gd->largefont, PASSPROMPT);
-        pt.y += (gd->largefont->desc.h-gd->deffont->desc.h)/2;
-
-	/* seeing as there are only two fields, this one will always
-	   either be empty or in the process of being edited, so there's
-	   no point drawing the finished password. */
-        if(onfield == 1) {
-            if(gd->type.buf)
-		for(i = 0; i < gd->type.pos; i++) {
-		    if(gd->type.buf[i])
-			d_font_printf(gd->raster, gd->deffont, pt, (byte *)"*");
-		    pt.x += gd->deffont->desc.w;
-		}
-	    pt.x = 6+d_font_gettextwidth(gd->largefont, PASSPROMPT);
-            pt.x += gd->type.pos*gd->deffont->desc.w;
-            d_font_printf(gd->raster, gd->deffont, pt, (byte *)"\x10");
-	}
-
-	/* Display the ``message of the day'', currently just the copyright
-	 * message. */
-        pt.x = 5;
-        pt.y = gd->raster->desc.h-4*gd->largefont->desc.h;
-
-        for(i = 0; motd[i] != NULL; i++) {
-            pt.x++; pt.y++;
-            d_font_printf(gd->raster, lshadow, pt, (byte *)"%s", motd[i]);
-            pt.x--; pt.y--;
-            d_font_printf(gd->raster, gd->largefont, pt, (byte *)"%s",
-                          motd[i]);
-            pt.y += gd->largefont->desc.h;
-        }
-
-        pt.x = pt.y = 0;
-        d_raster_update();
+    /* initialize network */
+    status = net_newclient(&gd->nh, server, port);
+    if(status == failure) {
+        d_error_fatal("Network init failed.\n");
+        return failure;
     }
 
-    d_font_delete(lshadow);
+    /* initialize local */
+    status = initlocal(gd);
+    if(status == failure) {
+        d_error_fatal("Local init failed.\n");
+        return failure;
+    }
+
+    evsk_new(&gd->ws.evsk);
+
+    /* setup a clean world state */
+    status = initworldstate(&gd->ws);
+    if(status != success) {
+        d_error_fatal("Worldstate init failed.\n");
+        return failure;
+    }
+
+    setluaworldstate(&gd->ws);
+
+    /* initialize message buffer */
+    msgbuf_init(&gd->msgbuf, MSGBUF_SIZE);
+    setluamsgbuf(&gd->msgbuf);
+
+    /* load data from server */
+    status = loaddata(gd);
+    if(status != success) {
+        d_error_fatal("Data load failed.\n");
+        return failure;
+    }
+
+    /* Initialize manager */
+    status = d_manager_new();
+    if(status == failure)
+        return failure;
+
+    d_manager_setscrollparameters(true, 0);
+
     return success;
 }
 
 
-void mainloop(gamedata_t *gd)
+/* gameloop
+ * Performs the main input-update-output loop most commonly thought of
+ * as the game. */
+int gameloop(gamedata_t *gd)
 {
     d_timehandle_t *th;
     object_t *o;
@@ -279,14 +158,17 @@ void mainloop(gamedata_t *gd)
     getobject(gd, gd->localobj);
     if(d_set_fetch(gd->ws.objs, gd->localobj, (void **)&o) != success) {
         d_error_debug("ack. couldn't fetch localobj!\n");
-        return;
+        return -1;
     }
     getroom(gd, o->location);
 
+    /* Reset type buffer */
     gd->type.pos = 0;
     gd->type.nalloc = 0;
     gd->type.buf = NULL;
     gd->type.done = false;
+
+    /* Reset some miscellaneous variables */
     gd->quitcount = 0;
     gd->status = NULL;
     gd->readycount = 40;
@@ -305,18 +187,26 @@ void mainloop(gamedata_t *gd)
 	    break;
 	}
 
-        while(evsk_pop(&gd->evsk, NULL));
+	/*
+	  gs->widgets[gs->focuswidget].input(gd);
+	*/
         handleinput(gd);
 
-        net_syncevents(gd->nh, &gd->evsk);
+        net_syncevents(gd->nh, &gd->ws.evsk);
 
-        processevents(&gd->evsk, (void *)gd);
+        processevents(&gd->ws.evsk, (void *)gd);
         updatephysics(&gd->ws);
 
+        while(evsk_pop(&gd->ws.evsk, NULL));
+
+	/*
+	  for(i = 0; i < gs->nwidgets; i++)
+	      gs->widgets[i].update(gd);
+	*/
         /* update manager/graphics */
         if(d_set_fetch(gd->ws.objs, gd->localobj, (void **)&o) != success) {
             d_error_debug("ack. couldn't fetch localobj!\n");
-            return;
+            return -1;
         }
         updatemanager(gd, o);
         /* update decor */
@@ -330,7 +220,7 @@ void mainloop(gamedata_t *gd)
         d_time_endcount(th);
     }
 
-    return;
+    return -1;
 }
 
 
@@ -432,9 +322,13 @@ void updatetext(gamedata_t *gd)
 {
     d_point_t pt;
     msgbufline_t *p;
+    object_t *o;
 
     /* update text */
     pt.y = 202; pt.x = 2;
+    d_set_fetch(gd->ws.objs, gd->localobj, (void **)&o);
+    d_font_printf(gd->raster, gd->deffont, pt, (byte *)"%d,%d,v%d,%d,a%d,%d", o->x, o->y, o->vx, o->vy,
+		  o->ax, o->ay);
     if(gd->evmode == textinput) {
 	if(gd->type.buf) {
 	    gd->type.buf[gd->type.pos] = 0;

@@ -42,9 +42,9 @@ void processevents(eventstack_t *evsk, void *obdat)
 {
     event_t ev;
     object_t *o;
-    room_t *room;
     bool status;
     int i, ret, oldtop;
+    word loc;
 
     for(i = 0; i < evsk->top; i++) {
         ev = evsk->events[i];
@@ -52,12 +52,6 @@ void processevents(eventstack_t *evsk, void *obdat)
         if(status != success) {
             d_error_debug(__FUNCTION__": failed to fetch object %d.\n",
                           ev.subject);
-            continue;
-        }
-
-        status = obtainroom(obdat, o->location, &room);
-        if(status != success) {
-            d_error_debug(__FUNCTION__": failed to fetch current room!\n");
             continue;
         }
 
@@ -103,6 +97,12 @@ void processevents(eventstack_t *evsk, void *obdat)
             }
             lua_settop(o->luastate, oldtop);
             break;
+
+	case VERB_EXIT:
+	    loc = *(roomhandle_t *)ev.auxdata;
+	    exitobject(obdat, ev.subject, loc);
+	    d_memory_delete(ev.auxdata);
+	    break;
         }
     }
 
@@ -110,6 +110,8 @@ void processevents(eventstack_t *evsk, void *obdat)
 }
 
 
+/* updatephysics
+ * Integrates physics ahead one time step for each object. */
 void updatephysics(worldstate_t *ws)
 {
     object_t *o;
@@ -125,19 +127,18 @@ void updatephysics(worldstate_t *ws)
 }
 
 
-#define MAXATTEMPTS 1000
-
-enum { upleft = 0, upright = 1, downleft = 2, downright = 3 };
-
 /* Physical constants */
 enum { PHYS_HTERMINALV = 4, PHYS_VTERMINALV = 8 };
 
+/* updateobjectphysics
+ * Update an object's physical variables, move the object appropriately. */
 void updateobjectphysics(worldstate_t *ws, object_t *obj)
 {
     bool xdone, ydone;
     d_point_t dst, pt;
     int xinc, yinc;
     room_t *room;
+    d_image_t *im;
 
     d_set_fetch(ws->rooms, obj->location, (void **)&room);
 
@@ -164,6 +165,8 @@ void updateobjectphysics(worldstate_t *ws, object_t *obj)
     xinc = (obj->vx > 0) ? 1:-1;
     yinc = (obj->vy > 0) ? 1:-1;
 
+    im = d_sprite_getcurframe(obj->sprite);
+
     while(!xdone || !ydone) {
 	if(!xdone) {
 	    if(pt.x == dst.x)
@@ -178,12 +181,16 @@ void updateobjectphysics(worldstate_t *ws, object_t *obj)
 		pt.y += yinc;
 	}
 
-	/* vertical plane checks */
-	if(pt.y >= room->map->h*room->map->tiledesc.h-1) {
-	    pt.y = room->map->h*room->map->tiledesc.h-1;
+	/* Boundry check */
+	if(pt.y <= 0)
 	    ydone = true;
-	    obj->vy = 0;
-	}
+	else if(pt.y+im->desc.h >= room->map->h*room->map->tiledesc.h)
+	    ydone = true;
+
+	if(pt.x <= 0)
+	    xdone = true;
+	else if(pt.x+im->desc.w >= room->map->w*room->map->tiledesc.w)
+	    xdone = true;
 
 	/* Progressive sprite-playfield collision checking */
 	if(checkpfcollide(obj->sprite, room->map, pt.x, pt.y)) {
@@ -209,7 +216,7 @@ void updateobjectphysics(worldstate_t *ws, object_t *obj)
     } else
 	obj->onground = false;
 
-    /* Objply friction */
+    /* Apply friction */
     if(obj->vx > 0) obj->vx--;
     if(obj->vx < 0) obj->vx++;
 }

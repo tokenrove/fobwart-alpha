@@ -486,8 +486,9 @@ void roomencode(room_t *room, DBT *data)
     bytebuf = 0;
     bytebuf |= (room->islit == true)?1:0;
 
-    pack(data, "swbssS", room->name, room->gravity, bytebuf,
-         room->mapname, room->bgname, room->contents);
+    pack(data, "swbssSwwww", room->name, room->gravity, bytebuf,
+         room->mapname, room->bgname, room->contents, room->exits[0],
+	 room->exits[1], room->exits[2], room->exits[3]);
     return;
 }
 
@@ -496,8 +497,9 @@ void roomdecode(room_t *room, DBT *data)
 {
     byte bytebuf;
 
-    unpack(data, "swbssS", &room->name, &room->gravity, &bytebuf,
-           &room->mapname, &room->bgname, &room->contents);
+    unpack(data, "swbssSwwww", &room->name, &room->gravity, &bytebuf,
+           &room->mapname, &room->bgname, &room->contents, &room->exits[0],
+	   &room->exits[1], &room->exits[2], &room->exits[3]);
     room->islit = (bytebuf&1)?true:false;
     return;
 }

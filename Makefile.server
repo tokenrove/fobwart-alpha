@@ -4,7 +4,7 @@
 #
 
 SERVOBJS=servmain.o servnet.o servlua.o network.o data.o servevnt.o lua.o \
-         gamecore.o db.o util.o
+         gamecore.o db.o util.o servdata.o
 SERVDATA=$(COMMONDATA)
 SERVHEADERS=fobwart.h fobserv.h fobdb.h fobnet.h
 

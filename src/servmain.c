@@ -18,17 +18,18 @@
 #include <dentata/memory.h>
 #include <dentata/random.h>
 #include <dentata/util.h>
+#include <dentata/file.h>
 
 #define PROGNAME "fobserv"
 
 
 int handleclient(client_t *cli, serverdata_t *sd);
 void wipeclient(d_set_t *clients, dword key);
-bool loadservdata(serverdata_t *sd);
 void sendevents(serverdata_t *sd);
+void unframe(serverdata_t *sd);
 void mainloop(serverdata_t *sd);
-bool getobject(serverdata_t *sd, objhandle_t key);
 void updatemanagedframes(worldstate_t *ws);
+void checktransitions(serverdata_t *sd);
 
 
 int main(void)
@@ -69,7 +70,7 @@ int main(void)
     if(sd.clients == NULL)
         d_error_fatal("%s: unable to allocate client set.\n", PROGNAME);
 
-    evsk_new(&sd.evsk);
+    evsk_new(&sd.ws.evsk);
 
     /* Start listening on the network */
     if(net_newserver(&sd.nh, FOBPORT) == failure)
@@ -82,13 +83,14 @@ int main(void)
 
 
     /* Shutdown and destroy */
-    evsk_delete(&sd.evsk);
+    evsk_delete(&sd.ws.evsk);
     d_set_delete(sd.clients);
     closeobjectdb(sd.objectdb);
     deletedbh(sd.objectdb);
     closelogindb(sd.logindb);
     deletedbh(sd.logindb);
     destroyworldstate(&sd.ws);
+    reslist_delete(&sd.reslist);
 
     return 0;
 }
@@ -158,14 +160,16 @@ void mainloop(serverdata_t *sd)
                 ev.verb = VERB_AUTO;
                 ev.auxdata = NULL;
                 ev.auxlen = 0;
-                evsk_push(&sd->evsk, ev);
+                evsk_push(&sd->ws.evsk, ev);
             }
 
+	    checktransitions(sd);
             sendevents(sd);
-            processevents(&sd->evsk, (void *)sd);
+            processevents(&sd->ws.evsk, (void *)sd);
             updatephysics(&sd->ws);
 	    updatemanagedframes(&sd->ws);
-            while(evsk_pop(&sd->evsk, NULL));
+            while(evsk_pop(&sd->ws.evsk, NULL));
+	    unframe(sd);
             nframed = 0;
         }
     }
@@ -186,8 +190,8 @@ void sendevents(serverdata_t *sd)
     d_iterator_t it;
     int i;
 
-    for(i = 0; i < sd->evsk.top; i++) {
-        ev = sd->evsk.events[i];
+    for(i = 0; i < sd->ws.evsk.top; i++) {
+        ev = sd->ws.evsk.events[i];
 
         if(d_set_fetch(sd->ws.objs, ev.subject, (void **)&o))
             room = o->location;
@@ -213,6 +217,17 @@ void sendevents(serverdata_t *sd)
         }
     }
 
+    return;
+}
+
+
+void unframe(serverdata_t *sd)
+{
+    client_t *cli;
+    dword key;
+    packet_t p;
+    d_iterator_t it;
+
     d_iterator_reset(&it);
     while(key = d_set_nextkey(&it, sd->clients), key != D_SET_INVALIDKEY) {
         d_set_fetch(sd->clients, key, (void **)&cli);
@@ -224,49 +239,6 @@ void sendevents(serverdata_t *sd)
         cli->state = 2;
     }
     return;
-}
-
-
-bool loadservdata(serverdata_t *sd)
-{
-    dword key, key2;
-    room_t *room;
-    object_t *o;
-    bool status;
-    d_iterator_t it, it2;
-
-    /* load room db */
-    sd->ws.rooms = d_set_new(0);
-    if(sd->ws.rooms == NULL) return failure;
-
-    /* Load each room */
-    roomdb_getall(sd->roomdb, sd->ws.rooms);
-
-    /* load object db */
-    sd->ws.objs = d_set_new(0);
-    if(sd->ws.objs == NULL) return failure;
-    d_iterator_reset(&it);
-    while(key = d_set_nextkey(&it, sd->ws.rooms), key != D_SET_INVALIDKEY) {
-        d_set_fetch(sd->ws.rooms, key, (void **)&room);
-	deskelroom(room);
-
-        d_iterator_reset(&it2);
-        while(key2 = d_set_nextkey(&it2, room->contents),
-              key2 != D_SET_INVALIDKEY) {
-            if(getobject(sd, key2) != success) {
-                d_error_debug(__FUNCTION__": failed to get object %d\n", key2);
-                return failure;
-            }
-            /* consistency checks */
-            d_set_fetch(sd->ws.objs, key2, (void **)&o);
-            if(o->location != key) {
-                d_error_debug(__FUNCTION__": note: object %d had bad "
-                              "location %d.\n", key2, o->location);
-                o->location = key;
-            }
-        }
-    }
-    return success;
 }
 
 
@@ -301,9 +273,25 @@ int handleclient(client_t *cli, serverdata_t *sd)
 	    break;
 
 	case PACK_GETRESLIST:
+	    p.type = PACK_RESLIST;
+	    p.body.reslist = sd->reslist;
+	    net_writepack(cli->nh, p);
 	    break;
 
 	case PACK_GETFILE:
+            d_error_debug("%d requested file %s.\n", cli->handle,
+			  p.body.string.data);
+	    p.type = PACK_FILE;
+	    p.body.file.name = p.body.string;
+	    p.body.file.checksum = checksumfile((char *)p.body.file.name.data);
+	    status = loadfile((char *)p.body.string.data, &p.body.file.data,
+			      &p.body.file.length);
+	    if(status == failure) {
+		d_error_debug("Failed to send file %s to %d.\n",
+			      p.body.string.data, cli->handle);
+		return -1;
+	    }
+	    net_writepack(cli->nh, p);
 	    break;
 
 	default:
@@ -323,7 +311,7 @@ int handleclient(client_t *cli, serverdata_t *sd)
                               (char *)p.body.event.auxdata:"");
                 return -1;
             }
-            evsk_push(&sd->evsk, p.body.event);
+            evsk_push(&sd->ws.evsk, p.body.event);
             break;
 
         case PACK_FRAME:
@@ -396,45 +384,6 @@ void wipeclient(d_set_t *clients, dword key)
 }
 
 
-bool getobject(serverdata_t *sd, objhandle_t handle)
-{
-    object_t *o;
-    bool status;
-
-    o = d_memory_new(sizeof(object_t));
-    if(o == NULL) return failure;
-    o->handle = handle;
-    objectdb_get(sd->objectdb, handle, o);
-    status = d_set_add(sd->ws.objs, o->handle, (void *)o);
-    if(status == failure) return failure;
-
-    status = deskelobject(o);
-    return status;
-}
-
-
-bool reloaddbs(serverdata_t *sd)
-{
-    bool status;
-
-    closelogindb(sd->logindb);
-    status = loadlogindb(sd->logindb);
-    if(status != success) return failure;
-
-    /* FIXME sync object db here */
-    closeobjectdb(sd->objectdb);
-    status = loadobjectdb(sd->objectdb);
-    if(status != success) return failure;
-
-    /* FIXME: sync room db here */
-    closeroomdb(sd->roomdb);
-    status = loadroomdb(sd->roomdb);
-    if(status != success) return failure;
-
-    return success;
-}
-
-
 /* updatemanagedframes
  * Skip each sprite to its next frame, to avoid inconsistencies with
  * clients. */
@@ -452,5 +401,53 @@ void updatemanagedframes(worldstate_t *ws)
     return;
 }
 
+
+void checktransitions(serverdata_t *sd)
+{
+    object_t *o;
+    dword key;
+    d_iterator_t it;
+    d_image_t *im;
+    room_t *room;
+    event_t ev;
+
+    ev.verb = VERB_EXIT;
+
+    d_iterator_reset(&it);
+    while(key = d_set_nextkey(&it, sd->ws.objs), key != D_SET_INVALIDKEY) {
+	d_set_fetch(sd->ws.objs, key, (void **)&o);
+	d_set_fetch(sd->ws.rooms, o->location, (void **)&room);
+
+	ev.subject = key;
+	im = d_sprite_getcurframe(o->sprite);
+
+	if(o->y+im->desc.h >= room->map->h*room->map->tiledesc.h-1 &&
+	   o->vy > 0) {
+	    ev.auxdata = d_memory_new(sizeof(roomhandle_t));
+	    d_memory_copy(ev.auxdata, &room->exits[2], sizeof(roomhandle_t));
+	    ev.auxlen = sizeof(roomhandle_t);
+            evsk_push(&sd->ws.evsk, ev);
+
+	} else if(o->y <= room->map->tiledesc.h && o->vy < 0) {
+	    ev.auxdata = d_memory_new(sizeof(roomhandle_t));
+	    d_memory_copy(ev.auxdata, &room->exits[0], sizeof(roomhandle_t));
+	    ev.auxlen = sizeof(roomhandle_t);
+            evsk_push(&sd->ws.evsk, ev);
+
+	} else if(o->x+im->desc.w >= room->map->w*room->map->tiledesc.w-1 &&
+		  o->vx > 0) {
+	    ev.auxdata = d_memory_new(sizeof(roomhandle_t));
+	    d_memory_copy(ev.auxdata, &room->exits[1], sizeof(roomhandle_t));
+	    ev.auxlen = sizeof(roomhandle_t);
+            evsk_push(&sd->ws.evsk, ev);
+
+	} else if(o->x <= room->map->tiledesc.w && o->vx < 0) {
+	    ev.auxdata = d_memory_new(sizeof(roomhandle_t));
+	    d_memory_copy(ev.auxdata, &room->exits[3], sizeof(roomhandle_t));
+	    ev.auxlen = sizeof(roomhandle_t);
+            evsk_push(&sd->ws.evsk, ev);
+	}
+    }
+}
 
 /* EOF fobserv.c */

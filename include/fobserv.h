@@ -17,10 +17,15 @@ typedef struct client_s {
 typedef struct serverdata_s {
     worldstate_t ws;
     d_set_t *clients;
-    eventstack_t evsk;
     nethandle_t *nh;
     dbhandle_t *logindb, *objectdb, *roomdb;
+    reslist_t reslist;
 } serverdata_t;
 
+
+/* servdata.c */
+extern bool loadservdata(serverdata_t *sd);
+extern bool getobject(serverdata_t *sd, objhandle_t key);
+extern bool loadfile(char *name, byte **data, dword *len);
 
 /* EOF fobserv.h */

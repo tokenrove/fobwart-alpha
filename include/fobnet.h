@@ -44,13 +44,9 @@ typedef struct packet_s {
 
         room_t room;
 
-	struct {
-	    word length;
-	    struct {
-		string_t name;
-		dword checksum;
-	    } *res;
-	} reslist;
+	reslist_t reslist;
+
+	string_t string;
 
 	struct {
 	    string_t name;
@@ -61,15 +57,18 @@ typedef struct packet_s {
 } packet_t;
 
 
+/* network.c */
 extern bool net_readpack(nethandle_t *, packet_t *p);
 extern bool net_writepack(nethandle_t *, packet_t p);
 extern void net_close(nethandle_t *);
 
+/* clinet.c */
 extern bool net_syncevents(nethandle_t *nh, eventstack_t *evsk);
 extern bool net_login(nethandle_t *nh, char *uname, char *password,
                       objhandle_t *localobj);
 extern bool net_newclient(nethandle_t **nh_, char *servname, int port);
 
+/* servnet.c */
 extern bool net_newserver(nethandle_t **, int port);
 extern void net_servselect(nethandle_t *servnh_, bool *servisactive,
                            d_set_t *clients, dword *activeclients);

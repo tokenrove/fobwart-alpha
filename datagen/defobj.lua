@@ -8,6 +8,17 @@ TRUE=1;
 FALSE=0;
 PHYSSCALE=1;
 
+-- Verb values
+VERB_NOP=0;
+VERB_TALK=1;
+VERB_RIGHT=2;
+VERB_LEFT=3;
+VERB_UP=4;
+VERB_DOWN=5;
+VERB_ACT=6;
+VERB_AUTO=7;
+VERB_EXIT=8;
+
 function verb_right(o) end
 function verb_left(o) end
 function verb_up(o) end

@@ -37,6 +37,8 @@
 
 
 d_set_t *deconsset(char *);
+void deconsexits(char *s, roomhandle_t exits[NEXITS_PER_ROOM]);
+
 
 int main(int argc, char **argv)
 {
@@ -81,6 +83,8 @@ int main(int argc, char **argv)
                     room.bgname = argv[i];
                 } else if(comspec == 7) {
                     room.contents = deconsset(argv[i]);
+		} else if(comspec == 8) {
+		    deconsexits(argv[i], room.exits);
                 } else
                     d_error_fatal("Too many arguments.\n");
             } else if(command == CHANGE) {
@@ -149,6 +153,8 @@ int main(int argc, char **argv)
             room.bgname = value;
         } else if(strcmp(field, "contents") == 0) {
             room.contents = deconsset(value);
+	} else if(strcmp(field, "exits") == 0) {
+	    deconsexits(value, room.exits);
         } else
             d_error_fatal("Invalid field ``%s''\n", field);
 
@@ -174,8 +180,8 @@ int main(int argc, char **argv)
         if(status != success)
             d_error_fatal("Couldn't retreive room.");
 
-        printf("%d -> name => %s, gravity => %d,\n islit => %s,\n "
-               "mapname => %s bgname => %s\n contents => ",
+        printf("%ld -> name => %s, gravity => %d,\n islit => %s,\n "
+               "mapname => %s, bgname => %s\n contents => ",
                key, room.name, room.gravity,
                (room.islit == false) ? "false":"true",
                room.mapname, room.bgname);
@@ -184,11 +190,13 @@ int main(int argc, char **argv)
             d_iterator_reset(&it);
             while(key = d_set_nextkey(&it, room.contents),
                   key != D_SET_INVALIDKEY) {
-                printf("%d, ", key);
+                printf("%ld, ", key);
             }
             printf("}\n");
         } else
             printf("{ nullset }\n");
+	printf(" exits => { %d, %d, %d, %d }\n", room.exits[0], room.exits[1],
+	       room.exits[2], room.exits[3]);
         break;
     }
 
@@ -214,4 +222,24 @@ d_set_t *deconsset(char *s)
     return set;
 }
 
-/* EOF edobject.c */
+
+void deconsexits(char *s, roomhandle_t exits[NEXITS_PER_ROOM])
+{
+    char *p;
+    dword key;
+    int i;
+
+    i = 0;
+    while(p = strtok(s, ","), p != NULL) {
+        s = NULL;
+        key = atoi(p);
+	if(i >= NEXITS_PER_ROOM) {
+	    fprintf(stderr, "Too many exits!\n");
+	}
+	exits[i++] = key;
+    }
+
+    return;
+}
+
+/* EOF edroom.c */

@@ -62,19 +62,25 @@ Common modules:
  src/lua.c	-- Common Lua interface routines and helper functions.
  src/network.c	-- Low-level and common networking routines.
  src/util.c	-- Various helper routines and data structures.
+ src/msgbuf.c   -- msgbuf_t implementation.
 
 Client modules:
- src/clievent.c -- obtain{object,room} implemenation. (see gamecore.c)
- src/clilua.c   -- Client-specific Lua routine implementation. (talklua,
-                   setluaenv, setluamsgbuf)
+ src/clievent.c -- obtain{object,room}, exitroom implementation.
+ src/clilua.c   -- Client-specific talklua, setluaenv, setluamsgbuf.
  src/climain.c  -- Client main body. (main, game loop, login loop)
- src/clidata.c  -- Code to do resource sync/data load for the client.
+ src/clidata.c  -- Resource sync/data load code for the client.
+ src/decor.c    -- Routines for drawing pretty things (window ornaments,
+                   energy bars)
+ src/unxaudio.c -- Crufty routines for audio playback on UNIX.
 
 Server modules:
  src/servevnt.c -- obtain{object,room} implemenation. (see gamecore.c)
  src/servlua.c  -- Server-specific Lua routine implementation. (talklua,
                    setluaenv)
-
+ src/servnet.c  -- Code for creating listening socket, accepting,
+                   handshaking, select()ing active sockets.
+ src/servmain.c -- Server main body, and far more server-specific code
+                   than is proper.
 
 
 
@@ -86,27 +92,35 @@ Bugs:
  1) Hang (probably in server) when a character jumps off the level... seems
     to be fixed after integration of pumpkin physics code, but could
     come back and bite us.
+ 2) Numerous gaping memory leaks (especially packets from the network,
+    ev.auxdata, et cetera).
+ 3) Many portions are very little-endian dependant...
 
 Features:
 
  Ordered:
- 3) Server resource sync.
+ - lua room access
+ 3) Debugging console.
  4) Dual-worlds system.
  5) Server db sync at regular intervals.
  6) Add server controls (at the very least, reload when SIGHUP'd)
  7) Add ``really quit?'' dialog if escape is hit.
  Make-or-break:
- - room transitions
+ - implement death
+ - implement projectiles
+ - implement items, inventory
  - object collide scripting
  - online tilemap editor, script editor
  Important:
+ - demo recording
  - tile scripting (collide and normal)
+ - display completion information/progress bar/spinning pipe on server
+   sync
  - modularize decor/windowing code, so that dialogs can be more easily
  created
  - develop tools for profiling network usage
  - look at pros and cons of merging seperate object lua states into
  one
- - implement death
  Bells-and-whistles:
  - megaman teleport routine
  - megaman death routine
@@ -141,6 +155,10 @@ VERB_DOWN	| 5	| Movement verb
 VERB_ACT	| 6	| Object-specific action
 VERB_AUTO	| 7	| Automatic code (sent by server every frame)
 ________________|_______|_______________________________________________
+
+Scripts can push verbs for an object with the lua function pushverb,
+which takes the subject, the verb, and any auxillary data appropriate
+to the verb after that.
 
 
 

@@ -173,7 +173,7 @@ void handleinput(gamedata_t *gd)
                 ev.auxdata = d_memory_new(gd->type.pos+1);
                 ev.auxlen = gd->type.pos+1;
                 d_memory_copy(ev.auxdata, gd->type.buf, gd->type.pos+1);
-                evsk_push(&gd->evsk, ev);
+                evsk_push(&gd->ws.evsk, ev);
                 d_memory_set(gd->type.buf, 0, gd->type.nalloc);
                 gd->type.pos = 0;
             }
@@ -199,7 +199,7 @@ void handlegameinput(gamedata_t *gd)
         ev.auxdata = d = d_memory_new(1);
         d[0] = 1;
         ev.auxlen = 1;
-        evsk_push(&gd->evsk, ev);
+        evsk_push(&gd->ws.evsk, ev);
     }
 
     if(d_event_ispressed(EV_JUMP) && !gd->bounce[EV_JUMP]) {
@@ -208,7 +208,7 @@ void handlegameinput(gamedata_t *gd)
         ev.auxdata = d = d_memory_new(1);
         d[0] = 2;
         ev.auxlen = 1;
-        evsk_push(&gd->evsk, ev);
+        evsk_push(&gd->ws.evsk, ev);
     }
 
     if(d_event_ispressed(EV_RIGHT)) {
@@ -216,13 +216,13 @@ void handlegameinput(gamedata_t *gd)
         ev.verb = VERB_RIGHT;
         ev.auxdata = NULL;
         ev.auxlen = 0;
-        evsk_push(&gd->evsk, ev);
+        evsk_push(&gd->ws.evsk, ev);
     } else if(d_event_ispressed(EV_LEFT)) {
         ev.subject = gd->localobj;
         ev.verb = VERB_LEFT;
         ev.auxdata = NULL;
         ev.auxlen = 0;
-        evsk_push(&gd->evsk, ev);
+        evsk_push(&gd->ws.evsk, ev);
     }
 
     if(d_event_ispressed(EV_UP)) {
@@ -230,13 +230,13 @@ void handlegameinput(gamedata_t *gd)
         ev.verb = VERB_UP;
         ev.auxdata = NULL;
         ev.auxlen = 0;
-        evsk_push(&gd->evsk, ev);
+        evsk_push(&gd->ws.evsk, ev);
     } else if(d_event_ispressed(EV_DOWN)) {
         ev.subject = gd->localobj;
         ev.verb = VERB_DOWN;
         ev.auxdata = NULL;
         ev.auxlen = 0;
-        evsk_push(&gd->evsk, ev);
+        evsk_push(&gd->ws.evsk, ev);
     }
 
     if(d_event_ispressed(EV_BACKSPACE) && !gd->bounce[EV_BACKSPACE])

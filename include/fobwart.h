@@ -37,7 +37,7 @@ enum {
 };
 
 /* Other game constants */
-enum { OBJSTACKSIZE = 0, LUAOBJECT_TAG = 0 };
+enum { OBJSTACKSIZE = 0, LUAOBJECT_TAG = 0, NEXITS_PER_ROOM = 4 };
 
 typedef word objhandle_t;
 typedef word roomhandle_t;
@@ -59,16 +59,17 @@ typedef struct typebuf_s {
 typedef struct object_s {
     char *name;
     objhandle_t handle;
-    roomhandle_t location;
+    roomhandle_t location, home;
 
     /* physics */
     word x, y;
-    int ax, ay;
-    int vx, vy;
+    short ax, ay;
+    short vx, vy;
     bool onground;
 
     /* statistics */
     word hp, maxhp;
+    d_set_t *inventory;
 
     /* graphics */
     char *spname;
@@ -101,6 +102,8 @@ typedef struct room_s {
     /* contents */
     d_set_t *contents;
 
+    roomhandle_t exits[NEXITS_PER_ROOM];
+
     /* scripts */
 } room_t;
 
@@ -113,31 +116,47 @@ typedef struct event_s {
 } event_t;
 
 
-typedef struct worldstate_s {
-    d_set_t *objs;
-    d_set_t *rooms;
-    lua_State *luastate;
-} worldstate_t;
-
-
 typedef struct eventstack_s {
     int top, nalloc;
     event_t *events;
 } eventstack_t;
 
 
+typedef struct worldstate_s {
+    d_set_t *objs;
+    d_set_t *rooms;
+    eventstack_t evsk;
+    lua_State *luastate;
+} worldstate_t;
+
+
+typedef struct reslist_s {
+    word length;
+    string_t *name;
+    dword *checksum;
+} reslist_t;
+
+
+/* util.c */
 extern void evsk_new(eventstack_t *evsk);
 extern void evsk_delete(eventstack_t *evsk);
 extern void evsk_push(eventstack_t *evsk, event_t ev);
 extern bool evsk_top(eventstack_t *evsk, event_t *ev);
 extern bool evsk_pop(eventstack_t *evsk, event_t *ev);
 
+/* util.c */
 extern bool string_fromasciiz(string_t *dst, const char *src);
 extern void string_delete(string_t *s);
 
+/* util.c */
 extern dword checksumfile(const char *name);
 extern void checksuminit(void);
 
+/* util.c */
+extern void reslist_delete(reslist_t *reslist);
+extern void reslist_add(reslist_t *reslist, char *dir, char *name, char *ext);
+
+/* data.c */
 extern d_sprite_t *loadsprite(char *fname);
 extern d_tilemap_t *loadtmap(char *filename);
 extern bool loadpalette(char *filename, d_palette_t *palette);
@@ -145,38 +164,50 @@ extern bool loadscript(lua_State *L, char *filename);
 extern bool deskelobject(object_t *o);
 extern bool deskelroom(room_t *room);
 
+/* data.c */
 extern bool initworldstate(worldstate_t *ws);
 extern void destroyworldstate(worldstate_t *ws);
 
+/* gamecore.c and {clievent,servevnt}.c */
 extern void processevents(eventstack_t *evsk, void *obdat);
 extern void updatephysics(worldstate_t *ws);
 extern bool obtainobject(void *obdat_, objhandle_t handle, object_t **o);
 extern bool obtainroom(void *obdat_, roomhandle_t handle, room_t **room);
+extern void exitobject(void *obdat_, objhandle_t subject,
+		       roomhandle_t location);
 
+/* lua.c */
 extern void setluaworldstate(worldstate_t *ws);
 extern bool freezestate(lua_State *L, byte **data, dword *len);
 extern bool meltstate(lua_State *L, char *data);
 
+/* lua.c and {clilua,servlua}.c */
 extern int setcuranimlua(lua_State *L);
+extern int animhasloopedlua(lua_State *L);
+extern int pushverblua(lua_State *L);
 extern int tostringlua(lua_State *L);
 extern int typelua(lua_State *L);
 extern int setobjectlua(lua_State *L);
 extern int getobjectlua(lua_State *L);
-
-extern void forkaudiothread(d_s3m_t *song);
-
-extern d_image_t *ebar_new(d_image_t *raster);
-extern void ebar_draw(d_image_t *bar, d_color_t primary, int a, int b);
-
-extern void decor_ll_mm2screen(d_image_t *bg);
-extern void decor_ll_mm2window(d_image_t *bg, d_rect_t r);
-
-extern void debouncecontrols(bool *bounce);
-extern void insertchar(typebuf_t *type, int i, bool shift);
-extern int handletextinput(typebuf_t *type, bool *bounce);
-
 extern void setluaenv(lua_State *L);
 extern int talklua(lua_State *L);
 
+/* unxaudio.c */
+extern void forkaudiothread(d_s3m_t *song);
+
+/* decor.c */
+extern d_image_t *ebar_new(d_image_t *raster);
+extern void ebar_draw(d_image_t *bar, d_color_t primary, int a, int b);
+
+/* decor.c */
+extern void decor_ll_mm2screen(d_image_t *bg);
+extern void decor_ll_mm2window(d_image_t *bg, d_rect_t r);
+
+/* local.c */
+extern void debouncecontrols(bool *bounce);
+
+/* type.c */
+extern void insertchar(typebuf_t *type, int i, bool shift);
+extern int handletextinput(typebuf_t *type, bool *bounce);
 
 /* EOF fobwart.h */

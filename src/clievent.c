@@ -41,6 +41,7 @@
 
 bool obtainobject(void *obdat_, objhandle_t handle, object_t **o);
 bool obtainroom(void *obdat_, roomhandle_t handle, room_t **room);
+void exitobject(void *gd_, objhandle_t subject, roomhandle_t location);
 
 
 bool obtainobject(void *gd_, objhandle_t handle, object_t **o)
@@ -91,6 +92,37 @@ bool obtainroom(void *gd_, roomhandle_t handle, room_t **room)
     }
 
     return success;
+}
+
+
+void exitobject(void *gd_, objhandle_t subject, roomhandle_t location)
+{
+    gamedata_t *gd = gd_;
+    object_t *o;
+    room_t *room;
+
+    d_set_fetch(gd->ws.objs, subject, (void **)&o);
+    d_set_fetch(gd->ws.rooms, o->location, (void **)&room);
+
+    if(gd->localobj == subject) {
+	/* If it's us, flush some things, get the new room. */
+	d_tilemap_delete(room->map);
+	d_image_delete(room->bg);
+	d_set_remove(gd->ws.rooms, o->location);
+
+	getroom(gd, location);
+	d_set_fetch(gd->ws.rooms, location, (void **)&room);
+
+    } else {
+	/* If they're someone else, wax 'em when they leave. */
+	d_manager_removesprite(o->sphandle);
+	d_set_remove(gd->ws.objs, subject);
+	d_set_remove(room->contents, subject);
+        lua_close(o->luastate);
+	d_sprite_delete(o->sprite);
+	d_memory_delete(o);
+    }
+    return;
 }
 
 /* EOF clievent.c */

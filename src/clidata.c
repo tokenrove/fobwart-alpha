@@ -11,44 +11,73 @@
 #include <dentata/memory.h>
 #include <dentata/color.h>
 #include <dentata/manager.h>
+#include <dentata/error.h>
+
+#include <stdio.h>
+#include <errno.h>
+#include <string.h>
+
+
+bool loaddata(gamedata_t *gd);
+void destroydata(gamedata_t *gd);
+static bool savefile(char *name, byte *data, dword len);
 
 
 bool loaddata(gamedata_t *gd)
 {
     bool status;
-    packet_t p;
-    string_t *requestlist;
-    dword csum, nrequests;
+    packet_t p, p2;
+    dword csum;
     int i;
 
-#if 0
     /* Request checksum list from server. */
     p.type = PACK_GETRESLIST;
     status = net_writepack(gd->nh, p);
     if(status == failure) return failure;
+
     status = net_readpack(gd->nh, &p);
     if(status == failure || p.type != PACK_RESLIST) return failure;
-
-    nrequests = 0;
-    requestlist = NULL;
 
     checksuminit();
 
     /* Compute checksums on local resources. */
     for(i = 0; i < p.body.reslist.length; i++) {
-	csum = checksumfile(p.body.reslist.res[i].name.data);
-	if(csum != p.body.reslist.res[i].checksum) {
-	    nrequests++;
-	    requestlist = d_memory_resize(requestlist,
-					  nrequests*sizeof(string_t));
-	    requestlist[nrequests-1] = p.body.reslist.res[i].name;
+	csum = checksumfile((char *)p.body.reslist.name[i].data);
+
+	/* Request files which don't match or don't exist. */
+	if(csum != p.body.reslist.checksum[i]) {
+	    p2.type = PACK_GETFILE;
+	    p2.body.string = p.body.reslist.name[i];
+	    status = net_writepack(gd->nh, p2);
+	    if(status == failure) return failure;
+
+	    fprintf(stderr, __FUNCTION__": readpack\n");
+	    status = net_readpack(gd->nh, &p2);
+	    if(status == failure || p2.type != PACK_FILE) return failure;
+
+	    fprintf(stderr, __FUNCTION__": downloaded %s (%ld, %lx) from "
+		    "server.\n", p2.body.file.name.data, p2.body.file.length,
+		    p2.body.file.checksum);
+
+	    if(savefile((char *)p2.body.file.name.data, p2.body.file.data,
+			p2.body.file.length) != success)
+		return failure;
+
+	    csum = checksumfile((char *)p2.body.file.name.data);
+	    if(csum != p2.body.file.checksum) {
+		d_error_debug(__FUNCTION__": checksum failed on %s! "
+			      "(%lx->%lx)\n", p2.body.file.name.data,
+			      p2.body.file.checksum, csum);
+		return failure;
+	    }
+
+	    d_memory_delete(p2.body.file.data);
+	    d_memory_delete(p2.body.file.name.data);
 	}
     }
 
-    /* Request files which don't match or don't exist. */
-
     /* Free contents of reslist */
-#endif
+    reslist_delete(&p.body.reslist);
 
     /* load fonts */
     gd->deffont = d_font_load(DEFFONTFNAME);
@@ -104,6 +133,29 @@ void destroydata(gamedata_t *gd)
     d_font_delete(gd->deffont);
     gd->deffont = NULL;
     return;
+}
+
+
+bool savefile(char *name, byte *data, dword len)
+{
+    FILE *fp;
+
+    fp = fopen(name, "w");
+    if(!fp) {
+	fprintf(stderr, "Failed to open %s for writing: %s\n", name,
+		strerror(errno));
+	return failure;
+    }
+
+    if(fwrite(data, 1, len, fp) != len) {
+	fprintf(stderr, "Failed to write %ld bytes into %s.\n", len,
+		name);
+	return failure;
+    }
+
+    fclose(fp);
+
+    return success;
 }
 
 

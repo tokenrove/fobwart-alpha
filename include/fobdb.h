@@ -18,6 +18,7 @@ extern bool objectdb_remove(dbhandle_t *dbh_, objhandle_t handle);
 extern bool loadroomdb(dbhandle_t *db_);
 extern void closeroomdb(dbhandle_t *db_);
 extern bool roomdb_get(dbhandle_t *db_, roomhandle_t handle, room_t *room);
+extern bool roomdb_getall(dbhandle_t *db_, d_set_t *rooms);
 extern bool roomdb_put(dbhandle_t *db_, roomhandle_t handle, room_t *room);
 extern bool roomdb_remove(dbhandle_t *dbh_, roomhandle_t handle);
 
