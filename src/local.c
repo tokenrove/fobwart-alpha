@@ -108,6 +108,7 @@ void eventinit(gamedata_t *gd)
     d_event_map(EV_SHIFT, D_KBD_RIGHTSHIFT);
     d_event_map(EV_PAGEUP, D_KBD_PAGEUP);
     d_event_map(EV_PAGEDOWN, D_KBD_PAGEDOWN);
+    d_event_map(EV_TAB, D_KBD_TAB);
 
     for(i = EV_ALPHABEGIN; i < EV_ALPHAEND; i++)
         d_event_map(i, keymap[i-EV_ALPHABEGIN]);

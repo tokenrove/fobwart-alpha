@@ -95,11 +95,15 @@ Bugs:
  2) Numerous gaping memory leaks (especially packets from the network,
     ev.auxdata, et cetera).
  3) Many portions are very little-endian dependant...
+ 4) Object location should not be stored in two different places. Perhaps
+    remove room->contents from the database?
+ 5) Key setup is ridiculous atm
 
 Features:
 
  Ordered:
  - lua room access
+ - configuration file specifying server, key setup, et cetera.
  3) Debugging console.
  4) Dual-worlds system.
  5) Server db sync at regular intervals.
@@ -110,7 +114,7 @@ Features:
  - implement projectiles
  - implement items, inventory
  - object collide scripting
- - online tilemap editor, script editor
+ - online tilemap editor (partially written), script editor
  Important:
  - demo recording
  - tile scripting (collide and normal)
@@ -313,3 +317,17 @@ worry too much. I doubt this will change any time soon.
 
 The checksum used is CRC-32 with 0x04C11DB7 as the polynomial, which I
 believe is used by ethernet, FDDI, and others.
+
+
+Events and their default mappings:
+
+EV_QUIT		Leave the current mode/dialog, 		D_KBD_ESCAPE
+		or the program itself.
+
+EV_LEFT		Move a cursor/character left.		D_KBD_CURSORLEFT
+EV_RIGHT	Move a cursor/character right.		D_KBD_CURSORRIGHT
+EV_ACT		Perform a character-specific action.	D_KBD_LEFTALT
+EV_JUMP		Jump.					D_KBD_LEFTCONTROL
+		
+
+Configuration file:

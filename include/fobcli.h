@@ -19,7 +19,7 @@ enum {
     EV_ACT = 5, EV_JUMP = 6, EV_TALK = 7,
     EV_ALPHABEGIN = 8, EV_ALPHAEND = 56,  EV_BACKSPACE = 57,
     EV_ENTER = 58, EV_SHIFT = 59, EV_PAGEUP = 60, EV_PAGEDOWN = 61,
-    EV_LAST = 62
+    EV_TAB = 62, EV_LAST = 63
 };
 
 #define LOGINPROMPT ((byte *)"login: ")
@@ -38,6 +38,7 @@ typedef struct msgbuf_s {
 struct gamedata_s;
 
 typedef struct widget_s {
+    bool takesfocus;
     bool (*input)(struct gamedata_s *);
     void (*update)(struct gamedata_s *);
 } widget_t;
@@ -65,7 +66,7 @@ typedef struct gamedata_s {
 
     msgbuf_t msgbuf;
 
-    int nwidgets;
+    int nwidgets, focuswidget;
     widget_t *widgets;
 
     /* room data */

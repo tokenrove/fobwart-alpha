@@ -59,11 +59,15 @@ int main(int argc, char **argv)
 
 
     /* enter main loop */
-    mode = 0;
+    mode = 1;
     while(mode != -1) {
 	switch(mode) {
 	case 0:
 	    mode = gameloop(&gd);
+	    break;
+
+	case 1:
+	    mode = tmapmode(&gd);
 	    break;
 
 	default:
@@ -178,6 +182,9 @@ int gameloop(gamedata_t *gd)
         forkaudiothread(gd->cursong);
     */
 
+
+    /* gd->focuswidget = 0; */
+
     while(1) {
         th = d_time_startcount(gd->fps, false);
         d_event_update();
@@ -188,7 +195,7 @@ int gameloop(gamedata_t *gd)
 	}
 
 	/*
-	  gs->widgets[gs->focuswidget].input(gd);
+	  gd->widgets[gd->focuswidget].input(gd);
 	*/
         handleinput(gd);
 
@@ -201,7 +208,7 @@ int gameloop(gamedata_t *gd)
 
 	/*
 	  for(i = 0; i < gs->nwidgets; i++)
-	      gs->widgets[i].update(gd);
+	      gd->widgets[i].update(gd);
 	*/
         /* update manager/graphics */
         if(d_set_fetch(gd->ws.objs, gd->localobj, (void **)&o) != success) {
@@ -253,8 +260,8 @@ void updatedecor(gamedata_t *gd, object_t *player)
     d_color_t c;
 
     /* Grab the message box color. */
-/*    d_memory_copy(&gd->ebar->palette, gd->curpalette,
-D_NCLUTITEMS*D_BYTESPERCOLOR); */
+    d_memory_copy(&gd->ebar->palette, gd->curpalette,
+		  D_NCLUTITEMS*D_BYTESPERCOLOR);
     c = d_color_fromrgb(gd->ebar, 220, 220, 170);
 
     /* Draw player's energy bar. */
@@ -322,13 +329,9 @@ void updatetext(gamedata_t *gd)
 {
     d_point_t pt;
     msgbufline_t *p;
-    object_t *o;
 
     /* update text */
     pt.y = 202; pt.x = 2;
-    d_set_fetch(gd->ws.objs, gd->localobj, (void **)&o);
-    d_font_printf(gd->raster, gd->deffont, pt, (byte *)"%d,%d,v%d,%d,a%d,%d", o->x, o->y, o->vx, o->vy,
-		  o->ax, o->ay);
     if(gd->evmode == textinput) {
 	if(gd->type.buf) {
 	    gd->type.buf[gd->type.pos] = 0;
