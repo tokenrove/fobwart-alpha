@@ -338,7 +338,8 @@ void cameramanage(gamedata_t *gd, object_t *player)
     x = player->x-gd->raster->desc.w/2;
     y = player->y-gd->raster->desc.h/2;
     if(x+gd->raster->desc.w > r.w) x = r.w-gd->raster->desc.w;
-    if(y+gd->raster->desc.h > r.h) y = r.h-gd->raster->desc.h;
+    /* Note: height of text window */
+    if(y+(gd->raster->desc.h-40) > r.h) y = r.h-(gd->raster->desc.h-40);
     if(x < 0) x = 0;
     if(y < 0) y = 0;
     d_manager_jump(x, y);
