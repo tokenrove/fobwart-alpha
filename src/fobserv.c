@@ -61,7 +61,7 @@ int main(void)
     d_set_t *clients;
     client_t *cli;
     int nfds;
-    fd_set readfds;
+    fd_set readfds, readfdbak;
     dword key;
     struct timeval timeout;
     bool status;
@@ -89,10 +89,14 @@ int main(void)
             FD_SET(cli->socket, &readfds);
         }
 
-        timeout.tv_sec = 5;
+        timeout.tv_sec = 1;
         timeout.tv_usec = 0;
 
+        d_memory_copy(&readfdbak, &readfds, sizeof(readfds));
         while(select(nfds+1, &readfds, NULL, NULL, &timeout) == 0) {
+            timeout.tv_sec = 1;
+            timeout.tv_usec = 0;
+            d_memory_copy(&readfds, &readfdbak, sizeof(readfdbak));
         }
 
         if(FD_ISSET(servsock, &readfds)) {
