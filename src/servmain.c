@@ -231,10 +231,11 @@ void sendevents(serverdata_t *sd)
 
 bool loadservdata(serverdata_t *sd)
 {
-    dword key;
+    dword key, key2;
     room_t *room;
+    object_t *o;
     bool status;
-    d_iterator_t it;
+    d_iterator_t it, it2;
 
     /* load room db */
     sd->ws.rooms = d_set_new(0);
@@ -253,14 +254,41 @@ bool loadservdata(serverdata_t *sd)
     if(status == failure) return failure;
     deskelroom(room);
 
+    /* DUP FOR HACK */
+    room = d_memory_new(sizeof(room_t));
+    if(room == NULL) return failure;
+    room->handle = 1;
+    status = d_set_add(sd->ws.rooms, room->handle, (void *)room);
+    if(status == failure) return failure;
+
+    /* The procedure for loading all rooms that will be here eventually
+     * will either use a database cursor or will load a specified default
+     * room and then traverse all connections from that room */
+    status = roomdb_get(sd->roomdb, room->handle, room);
+    if(status == failure) return failure;
+    deskelroom(room);
+    /* END DUP */
+
     /* load object db */
     sd->ws.objs = d_set_new(0);
     if(sd->ws.objs == NULL) return failure;
     d_iterator_reset(&it);
-    while(key = d_set_nextkey(&it, room->contents), key != D_SET_INVALIDKEY) {
-        if(getobject(sd, key) != success) {
-            d_error_debug(__FUNCTION__": failed to get object %d\n", key);
-            return failure;
+    while(key = d_set_nextkey(&it, sd->ws.rooms), key != D_SET_INVALIDKEY) {
+        d_set_fetch(sd->ws.rooms, key, (void **)&room);
+        d_iterator_reset(&it2);
+        while(key2 = d_set_nextkey(&it2, room->contents),
+              key2 != D_SET_INVALIDKEY) {
+            if(getobject(sd, key2) != success) {
+                d_error_debug(__FUNCTION__": failed to get object %d\n", key2);
+                return failure;
+            }
+            /* consistency checks */
+            d_set_fetch(sd->ws.objs, key2, (void **)&o);
+            if(o->location != key) {
+                d_error_debug(__FUNCTION__": note: object %d had bad "
+                              "location %d.\n", key2, o->location);
+                o->location = key;
+            }
         }
     }
     return success;

@@ -26,7 +26,7 @@ VPATH=src datagen include
 
 COMMONDATA=data/defobj.luc data/tek.luc data/obs.luc data/carlos.luc \
            data/tek.spr data/obs.spr data/carlos.spr \
-           data/phibes.spr data/phibes.luc data/room00.map
+           data/phibes.spr data/phibes.luc data/room00.map data/room01.map
 
 CLIPROG=fobwart
 SERVPROG=fobserv

@@ -354,7 +354,7 @@ bool loadroomdb(dbhandle_t *db_)
         return failure;
     }
 
-    i = db->p->open(db->p, ROOMDB, NULL, DB_BTREE, DB_CREATE, 0664);
+    i = db->p->open(db->p, ROOMDB, NULL, DB_BTREE, 0, 0664);
     if(i != 0) {
         db->p->err(db->p, i, "%s", ROOMDB);
         return failure;
