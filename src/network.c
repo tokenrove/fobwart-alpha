@@ -1,0 +1,170 @@
+/* 
+ * network.c
+ * Created: Wed Jul 18 01:29:32 2001 by tek@wiw.org
+ * Revised: Wed Jul 18 06:09:06 2001 by tek@wiw.org
+ * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
+ * This program comes with ABSOLUTELY NO WARRANTY.
+ * $Id$
+ * 
+ */
+
+#include <dentata/types.h>
+#include <dentata/image.h>
+#include <dentata/error.h>
+#include <dentata/time.h>
+#include <dentata/raster.h>
+#include <dentata/event.h>
+#include <dentata/font.h>
+#include <dentata/sprite.h>
+#include <dentata/tilemap.h>
+#include <dentata/manager.h>
+#include <dentata/sample.h>
+#include <dentata/audio.h>
+#include <dentata/s3m.h>
+#include <dentata/set.h>
+#include <dentata/color.h>
+#include <dentata/memory.h>
+
+#include <lua.h>
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#include <netdb.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <netinet/in.h>
+
+#include "fobwart.h"
+#include "fobnet.h"
+
+bool initnet(gamedata_t *gd, char *servname, int port);
+void closenet(gamedata_t *gd);
+bool login(gamedata_t *gd, char *uname, char *password);
+void syncevents(gamedata_t *gd);
+
+bool readpack(int socket, packet_t *p);
+bool writepack(int socket, packet_t p);
+
+bool initnet(gamedata_t *gd, char *servname, int port)
+{
+    struct hostent *hostent;
+    struct sockaddr_in sockaddr;
+    packet_t p;
+    bool status;
+
+    gd->socket = socket(AF_INET, SOCK_STREAM, 0);
+    if(gd->socket == -1) {
+        d_error_debug(__FUNCTION__": %s\n", strerror(errno));
+        return failure;
+    }
+
+    sockaddr.sin_family = AF_INET;
+    hostent = gethostbyname(servname);
+    if(hostent == NULL) {
+        d_error_debug(__FUNCTION__": %s\n", strerror(errno));
+        return failure;
+    }
+
+    memcpy(&sockaddr.sin_addr, hostent->h_addr_list[0], hostent->h_length);
+    sockaddr.sin_port = htons(port);
+
+    if(connect(gd->socket, (const struct sockaddr *)&sockaddr,
+               sizeof(sockaddr)) == -1) {
+        d_error_debug(__FUNCTION__": %s\n", strerror(errno));
+        return failure;
+    }
+
+    /* Handshake */
+    status = readpack(gd->socket, &p);
+    if(status == failure || p.type != PACK_YEAWHAW)
+        return failure;
+    d_error_debug("PACK_YEAWHAW: %d\n", p.body.handshake);
+    p.type = PACK_IRECKON;
+    p.body.handshake = 42;
+    status = writepack(gd->socket, p);
+    if(status == failure)
+        return failure;
+    status = readpack(gd->socket, &p);
+    if(status == failure || p.type != PACK_AYUP)
+        return failure;
+    d_error_debug("PACK_AYUP: %d\n", p.body.handshake);
+
+    return success;
+}
+
+void closenet(gamedata_t *gd)
+{
+    close(gd->socket);
+    gd->socket = -1;
+    return;
+}
+
+bool login(gamedata_t *gd, char *uname, char *password)
+{
+    return success;
+}
+
+void syncevents(gamedata_t *gd)
+{
+    return;
+}
+
+bool readpack(int socket, packet_t *p)
+{
+    int i;
+
+    i = read(socket, &p->type, 1);
+    if(i == 0) return failure;
+    if(i == -1) goto error;
+
+    switch(p->type) {
+    case PACK_YEAWHAW:
+    case PACK_IRECKON:
+    case PACK_AYUP:
+        i = read(socket, &p->body.handshake, 1);
+        if(i == -1) goto error;
+        if(i == 0) return failure;
+        break;
+
+    default:
+        d_error_debug(__FUNCTION__": default. (%d)\n", p->type);
+        goto error;
+    }
+
+    return success;
+error:
+    d_error_debug(__FUNCTION__": %s\n", strerror(errno));
+    return failure;    
+}
+
+bool writepack(int socket, packet_t p)
+{
+    int i;
+
+    i = write(socket, &p.type, 1);
+    if(i == -1) goto error;
+
+    switch(p.type) {
+    case PACK_YEAWHAW:
+    case PACK_IRECKON:
+    case PACK_AYUP:
+        i = write(socket, &p.body.handshake, 1);
+        if(i == -1) goto error;
+        if(i == 0) d_error_debug(__FUNCTION__": blank write\n");
+        break;
+
+    default:
+        goto error;
+    }
+
+    return success;
+error:
+    d_error_debug(__FUNCTION__": %s\n", strerror(errno));
+    return failure;    
+}
+
+/* EOF network.c */
