@@ -20,42 +20,31 @@
 #include <dentata/color.h>
 #include <dentata/memory.h>
 
-#include <sys/types.h>
-#include <limits.h>
-#include <db.h>
-#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <errno.h>
-#include <netinet/in.h>
 
 #include <lua.h>
 
 #include "fobwart.h"
 #include "fobdb.h"
 
-#define PROGNAME "fobobjectdb"
-
-extern void objencode(object_t *obj, DBT *data);
-extern void objdecode(object_t *obj, DBT *data);
-extern int bt_handle_cmp(DB *dbp, const DBT *a_, const DBT *b_);
+#define PROGNAME "edobject"
 
 
 int main(int argc, char **argv)
 {
     enum { HELP = 0, CREATE, ADD, REMOVE, VIEW, CHANGE } command = HELP;
-    DB *dbp;
-    DBT key, data;
+    objhandle_t key;
     object_t object;
     int i, comspec = 0;
     word wordbuf;
     char *field, *value;
+    dbhandle_t *dbh;
+    bool status;
 
-    memset(&key, 0, sizeof(key));
-    memset(&data, 0, sizeof(data));
-    memset(&object, 0, sizeof(object));
+    d_memory_set(&object, 0, sizeof(object));
     field = value = NULL;
+    key = 0;
 
     for(i = 1; i < argc; i++) {
         if(argv[i][0] == '-') {
@@ -66,18 +55,13 @@ int main(int argc, char **argv)
             else if(strcmp(argv[i], "remove") == 0) command = REMOVE;
             else if(strcmp(argv[i], "view") == 0) command = VIEW;
             else if(strcmp(argv[i], "change") == 0) command = CHANGE;
-            else {
-                fprintf(stderr, "Unknown command. (try ``help'')\n");
-                exit(EXIT_FAILURE);
-            }
+            else
+                d_error_fatal("Unknown command. (try ``help'')\n");
             comspec++;
         } else {
             if(command == ADD) {
                 if(comspec == 1) {
-                    key.size = sizeof(objhandle_t);
-                    key.data = malloc(key.size);
-                    wordbuf = atoi(argv[i]);
-                    memcpy(key.data, &wordbuf, key.size);
+                    key = atoi(argv[i]);
                 } else if(comspec == 2) {
                     object.name = argv[i];
                 } else if(comspec == 3) {
@@ -102,30 +86,28 @@ int main(int argc, char **argv)
                     object.maxhp = atoi(argv[i]);
                 } else if(comspec == 13) {
                     object.spname = argv[i];
+                } else {
+                    d_error_fatal("Too many arguments.\n");
                 }
             } else if(command == CHANGE) {
-                if(key.data == NULL) {
-                    key.size = sizeof(objhandle_t);
-                    key.data = malloc(key.size);
-                    wordbuf = atoi(argv[i]);
-                    memcpy(key.data, &wordbuf, key.size);
-                } else if(field == NULL) {
+                if(comspec == 1) {
+                    key = atoi(argv[i]);
+                } else if(comspec == 2) {
                     field = argv[i];
-                } else {
+                } else if(comspec == 3) {
                     value = argv[i];
+                } else {
+                    d_error_fatal("Too many arguments.\n");
                 }
             } else if(command == REMOVE ||
                       command == VIEW) {
-                if(key.data == NULL) {
-                    key.size = sizeof(objhandle_t);
-                    key.data = malloc(key.size);
-                    wordbuf = atoi(argv[i]);
-                    memcpy(key.data, &wordbuf, key.size);
+                if(comspec == 1) {
+                    key = atoi(argv[i]);
+                } else {
+                    d_error_fatal("Too many arguments.\n");
                 }
-            } else {
-                fprintf(stderr, "Bad argument to command. (try ``help'')\n");
-                exit(EXIT_FAILURE);
-            }
+            } else
+                d_error_fatal("Bad argument to command. (try ``help'')\n");
             comspec++;
         }
     }
@@ -133,22 +115,13 @@ int main(int argc, char **argv)
     if(command == CHANGE && (field == NULL || value == NULL))
         command = HELP;
 
-    i = db_create(&dbp, NULL, 0);
-    if(i != 0) {
-        fprintf(stderr, "%s: db_create: %s\n", PROGNAME, db_strerror(i));
-        exit(EXIT_FAILURE);
-    }
-    
-    i = dbp->set_bt_compare(dbp, bt_handle_cmp);
-    if(i != 0) {
-        dbp->err(dbp, i, "%s", "set_bt_compare");
-        exit(EXIT_FAILURE);
-    }
-
-    i = dbp->open(dbp, "object.db", NULL, DB_BTREE, DB_CREATE, 0664);
-    if(i != 0) {
-        dbp->err(dbp, i, "%s", "object.db");
-        exit(EXIT_FAILURE);
+    dbh = newdbh();
+    if(command == CREATE)
+        d_error_fatal("Unsupported operation CREATE.\n");
+    else {
+        status = loadobjectdb(dbh);
+        if(status != success)
+            d_error_fatal("Unable to load object db.");
     }
 
     switch(command) {
@@ -166,12 +139,9 @@ int main(int argc, char **argv)
         break;
 
     case CHANGE:
-        i = dbp->get(dbp, NULL, &key, &data, 0);
-        if(i != 0) {
-            dbp->err(dbp, i, "dbp->get");
-            exit(EXIT_FAILURE);
-        }
-        objdecode(&object, &data);
+        status = objectdb_get(dbh, key, &object);
+        if(status != success)
+            d_error_fatal("Couldn't retreive object.");
 
         if(strcmp(field, "name") == 0) {
             object.name = value;
@@ -197,51 +167,43 @@ int main(int argc, char **argv)
             object.maxhp = atoi(value);
         } else if(strcmp(field, "spname") == 0) {
             object.spname = value;
-        } else {
-            fprintf(stderr, "Invalid field ``%s''\n", field);
-            exit(EXIT_FAILURE);
-        }
+        } else
+            d_error_fatal("Invalid field ``%s''\n", field);
 
-        objencode(&object, &data);
-        i = dbp->put(dbp, NULL, &key, &data, 0);
-        if(i != 0) {
-            dbp->err(dbp, i, "dbp->put");
-            exit(EXIT_FAILURE);
-        }
+        status = objectdb_put(dbh, key, &object);
+        if(status != success)
+            d_error_fatal("Couldn't store object.");
         break;
 
     case REMOVE:
-        i = dbp->del(dbp, NULL, &key, 0);
-        if(i != 0) {
-            dbp->err(dbp, i, "dbp->del");
-            exit(EXIT_FAILURE);
-        }
+        status = objectdb_remove(dbh, key);
+        if(status != success)
+            d_error_fatal("Couldn't remove object.");
         break;
 
     case ADD:
-        objencode(&object, &data);
-        i = dbp->put(dbp, NULL, &key, &data, DB_NOOVERWRITE);
-        if(i != 0) {
-            dbp->err(dbp, i, "dbp->put");
-            exit(EXIT_FAILURE);
-        }
+        status = objectdb_put(dbh, key, &object);
+        if(status != success)
+            d_error_fatal("Couldn't store object.");
         break;
 
     case VIEW:
-        i = dbp->get(dbp, NULL, &key, &data, 0);
-        if(i != 0) {
-            dbp->err(dbp, i, "dbp->get");
-            exit(EXIT_FAILURE);
-        }
-        objdecode(&object, &data);
-        printf("%d -> name => %s, location => %d,\n pos => (%d, %d),\n accel => (%d, %d),\n velocity => (%d, %d),\n onground => %s,\n hp => (%d/%d)\n spname => %s\n", *((objhandle_t *)key.data), object.name, object.location, object.x,
+        status = objectdb_get(dbh, key, &object);
+        if(status != success)
+            d_error_fatal("Couldn't retreive object.");
+
+        printf("%d -> name => %s, location => %d,\n pos => (%d, %d),\n "
+               "accel => (%d, %d),\n velocity => (%d, %d),\n "
+               "onground => %s,\n hp => (%d/%d)\n spname => %s\n",
+               key, object.name, object.location, object.x,
                object.y, object.ax, object.ay, object.vx, object.vy,
                (object.onground == false) ? "false":"true",
                object.hp, object.maxhp, object.spname);
         break;
     }
 
-    dbp->close(dbp, 0);
+    closeobjectdb(dbh);
+    deletedbh(dbh);
     exit(EXIT_SUCCESS);
 }
 

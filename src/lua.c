@@ -217,7 +217,7 @@ int setcuranimlua(lua_State *L)
     word anim;
     object_t *o;
     d_image_t *p;
-    word oldh, oldw;
+    word oldh;
 
     o = lua_touserdata(L, -2);
     anim = lua_tonumber(L, -1);
@@ -227,7 +227,10 @@ int setcuranimlua(lua_State *L)
     oldh = p->desc.h;
     d_sprite_setcuranim(o->sprite, anim);
     p = d_sprite_getcurframe(o->sprite);
-    o->y += oldh-p->desc.h;
+    if(oldh > p->desc.h)
+        o->y += oldh-p->desc.h;
+    else
+        o->y -= p->desc.h-oldh;
     return 0;
 }
 

@@ -397,4 +397,21 @@ bool getobject(serverdata_t *sd, objhandle_t handle)
     return status;
 }
 
+
+bool reloaddbs(serverdata_t *sd)
+{
+    bool status;
+
+    closelogindb(sd->logindb);
+    status = loadlogindb(sd->logindb);
+    if(status != success) return failure;
+
+    /* sync object db */
+    closeobjectdb(sd->objectdb);
+    status = loadobjectdb(sd->objectdb);
+    if(status != success) return failure;
+
+    return success;
+}
+
 /* EOF fobserv.c */
