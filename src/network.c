@@ -1,7 +1,7 @@
 /* 
  * network.c
  * Created: Wed Jul 18 01:29:32 2001 by tek@wiw.org
- * Revised: Thu Jul 19 21:36:25 2001 by tek@wiw.org
+ * Revised: Fri Jul 20 00:26:26 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -154,6 +154,7 @@ bool getobject(gamedata_t *gd, word handle)
     bool status;
     object_t *o;
     packet_t p;
+    char *s;
 
     d_error_debug("Added %d\n", handle);
     p.type = PACK_GETOBJECT;
@@ -169,7 +170,10 @@ bool getobject(gamedata_t *gd, word handle)
     if(status == failure) return failure;
     d_memory_copy(o, &p.body.object, sizeof(p.body.object));
     d_error_debug("Object %d uses sprite %s\n", handle, o->spname);
-    o->sprite = loadsprite(DATADIR "/phibes.spr");
+    s = d_memory_new(strlen(DATADIR)+strlen(o->spname)+6);
+    sprintf(s, "%s/%s.spr", DATADIR, o->spname);
+    o->sprite = loadsprite(s);
+    d_memory_delete(s);
     if(o->sprite == NULL) return failure;
     status = d_manager_addsprite(o->sprite, &o->sphandle, 0);
     if(status == failure)

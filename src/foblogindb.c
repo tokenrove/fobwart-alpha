@@ -1,7 +1,7 @@
 /* 
  * foblogindb.c
  * Created: Thu Jul 19 17:25:20 2001 by tek@wiw.org
- * Revised: Thu Jul 19 23:56:14 2001 by tek@wiw.org
+ * Revised: Fri Jul 20 00:22:50 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -79,7 +79,8 @@ int main(int argc, char **argv)
                 } else {
                     loginrec.object = atoi(argv[i]);
                 }
-            } else if(command == VIEW) {
+            } else if(command == REMOVE ||
+                      command == VIEW) {
                 if(key.data == NULL) {
                     key.data = argv[i];
                     key.size = strlen(key.data)+1;
@@ -88,6 +89,7 @@ int main(int argc, char **argv)
                 fprintf(stderr, "Bad argument to command. (try ``help'')\n");
                 exit(EXIT_FAILURE);
             }
+            comspec++;
         }
     }
 
@@ -109,8 +111,15 @@ int main(int argc, char **argv)
         break;
 
     case CREATE:
-    case REMOVE:
     case CHANGE:
+        break;
+
+    case REMOVE:
+        i = dbp->del(dbp, NULL, &key, 0);
+        if(i != 0) {
+            dbp->err(dbp, i, "dbp->del");
+            exit(EXIT_FAILURE);
+        }
         break;
 
     case ADD:
@@ -130,7 +139,7 @@ int main(int argc, char **argv)
     case VIEW:
         i = dbp->get(dbp, NULL, &key, &data, 0);
         if(i != 0) {
-            dbp->err(dbp, i, "dbp->put");
+            dbp->err(dbp, i, "dbp->get");
             exit(EXIT_FAILURE);
         }
         loginrec.password = data.data;

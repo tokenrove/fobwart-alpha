@@ -1,7 +1,7 @@
 /* 
  * fobserv.c
  * Created: Wed Jul 18 03:15:09 2001 by tek@wiw.org
- * Revised: Fri Jul 20 00:17:12 2001 by tek@wiw.org
+ * Revised: Fri Jul 20 00:49:13 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -282,8 +282,8 @@ bool loadservdata(serverdata_t *sd)
     object_t *o;
     room_t *room;
     bool status;
+    char *s;
 
-    /* load login db */
     /* load room db */
     sd->ws.rooms = d_set_new(0);
     if(sd->ws.rooms == NULL) return failure;
@@ -308,8 +308,12 @@ bool loadservdata(serverdata_t *sd)
     status = d_set_add(sd->ws.objs, o->handle, (void *)o);
     if(status == failure) return failure;
     o->spname = "phibes";
-    o->sprite = loadsprite(DATADIR "/phibes.spr");
-    o->name = "phibes";
+    s = d_memory_new(strlen(DATADIR)+strlen(o->spname)+6);
+    sprintf(s, "%s/%s.spr", DATADIR, o->spname);
+    o->sprite = loadsprite(s);
+    d_memory_delete(s);
+    if(o->sprite == NULL) return failure;
+    o->name = "Phibes";
     o->ax = o->vx = o->vy = 0;
     o->location = room->handle;
     o->ay = room->gravity;
@@ -324,9 +328,13 @@ bool loadservdata(serverdata_t *sd)
     o->handle = d_set_getunusedkey(sd->ws.objs);
     status = d_set_add(sd->ws.objs, o->handle, (void *)o);
     if(status == failure) return failure;
-    o->spname = "phibes";
-    o->sprite = loadsprite(DATADIR "/phibes.spr");
-    o->name = "STAN";
+    o->spname = "obs";
+    s = d_memory_new(strlen(DATADIR)+strlen(o->spname)+6);
+    sprintf(s, "%s/%s.spr", DATADIR, o->spname);
+    o->sprite = loadsprite(s);
+    d_memory_delete(s);
+    if(o->sprite == NULL) return failure;
+    o->name = "Obs";
     o->ax = o->vx = o->vy = 0;
     o->ay = room->gravity;
     o->location = room->handle;
@@ -334,7 +342,7 @@ bool loadservdata(serverdata_t *sd)
     o->x = 64;
     o->y = 64;
     o->maxhp = 412;
-    o->hp = 200;
+    o->hp = 412;
     
     return success;
 }
