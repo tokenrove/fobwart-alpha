@@ -128,17 +128,14 @@ void mainloop(gamedata_t *gd)
             if(++gd->quitcount > 1)
                 break;
 
-        if(gd->slowmo == false ||
-           ++gd->slowcount > 2) {
-            handleinput(gd);
-            /* dispatch events */
-            /* sync info with server */
-            syncevents(gd);
-            /* do physics calculation */
-            processevents(gd);
-            updatephysics(gd);
-            gd->slowcount = 0;
-        }
+        while(evsk_pop(&gd->evsk));
+        handleinput(gd);
+        /* dispatch events */
+        /* sync info with server */
+        syncevents(gd);
+        /* do physics calculation */
+        processevents(gd);
+        updatephysics(gd);
 
         /* update manager/graphics */
         d_set_fetch(gd->rooms, gd->curroom, (void **)&room);

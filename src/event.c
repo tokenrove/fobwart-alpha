@@ -1,7 +1,7 @@
 /* 
  * event.c
  * Created: Sun Jul 15 03:40:42 2001 by tek@wiw.org
- * Revised: Thu Jul 19 16:39:18 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 16:52:24 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -53,7 +53,7 @@ void processevents(gamedata_t *gd)
         if(status != success) {
             d_error_debug(__FUNCTION__": failed to fetch object %d.\n",
                           ev.subject);
-            return;
+            continue;
         }
 
         switch(ev.verb) {

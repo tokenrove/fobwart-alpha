@@ -1,7 +1,7 @@
 /* 
  * network.c
  * Created: Wed Jul 18 01:29:32 2001 by tek@wiw.org
- * Revised: Thu Jul 19 16:27:30 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 16:49:40 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
