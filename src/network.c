@@ -1,7 +1,7 @@
 /* 
  * network.c
  * Created: Wed Jul 18 01:29:32 2001 by tek@wiw.org
- * Revised: Fri Jul 20 00:26:26 2001 by tek@wiw.org
+ * Revised: Fri Jul 20 04:02:08 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -25,6 +25,16 @@
 #include <dentata/color.h>
 #include <dentata/memory.h>
 #include <dentata/pcx.h>
+
+#include <sys/types.h>
+#include <limits.h>
+#include <db.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <netinet/in.h>
 
 #include <lua.h>
 #include <errno.h>
@@ -189,6 +199,9 @@ bool getroom(gamedata_t *gd, word handle)
     room_t *room;
     packet_t p;
     d_image_t *im;
+    char *s;
+    dword key;
+    object_t *o;
 
     d_error_debug("Added room %d\n", handle);
     p.type = PACK_GETROOM;
@@ -205,17 +218,31 @@ bool getroom(gamedata_t *gd, word handle)
     d_memory_copy(room, &p.body.room, sizeof(p.body.room));
 
     d_error_debug("Room %d uses map %s\n", handle, room->mapname);
-    room->map = loadtmap(DATADIR "/rlevel.map");
+    s = d_memory_new(strlen(DATADIR)+strlen(room->mapname)+6);
+    sprintf(s, "%s/%s.map", DATADIR, room->mapname);
+    room->map = loadtmap(s);
+    d_memory_delete(s);
+    if(room->map == NULL) return failure;
 
-    /* FIXME note: memory leak here */
-    im = d_pcx_load(DATADIR "/stars.pcx");
-    if(im == NULL)
-        return failure;
-    d_manager_addimagelayer(im, NULL, -1);
+    s = d_memory_new(strlen(DATADIR)+strlen(room->mapname)+6);
+    sprintf(s, "%s/%s.pcx", DATADIR, room->bgname);
+    room->bg = d_pcx_load(s);
+    d_memory_delete(s);
+    if(room->bg == NULL) return failure;
+
+    d_manager_wipelayers();
+    d_manager_wipesprites();
+    d_set_resetiteration(gd->ws.objs);
+    while(key = d_set_nextkey(gd->ws.objs), key != D_SET_INVALIDKEY) {
+        d_set_fetch(gd->ws.objs, key, (void **)&o);
+        if(o->location == room->handle)
+            d_manager_addsprite(o->sprite, &o->sphandle, 0);
+    }
+    status = d_manager_addimagelayer(room->bg, &room->bghandle, -1);
+    if(status == failure) return failure;
 
     status = d_manager_addtilemaplayer(room->map, &room->tmhandle, 0);
-    if(status == failure)
-        return failure;
+    if(status == failure) return failure;
 
     return success;
 }

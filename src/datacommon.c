@@ -1,7 +1,7 @@
 /* 
  * datacommon.c
  * Created: Thu Jul 19 18:35:37 2001 by tek@wiw.org
- * Revised: Thu Jul 19 22:00:30 2001 by tek@wiw.org
+ * Revised: Fri Jul 20 04:05:38 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -24,6 +24,16 @@
 #include <dentata/s3m.h>
 #include <dentata/set.h>
 
+#include <sys/types.h>
+#include <limits.h>
+#include <db.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <netinet/in.h>
+
 #include <lua.h>
 
 #include "fobwart.h"
@@ -34,6 +44,9 @@ d_tilemap_t *loadtmap(char *filename);
 d_sprite_t *loadsprite(char *filename);
 bool initworldstate(worldstate_t *ws);
 void destroyworldstate(worldstate_t *ws);
+void objencode(object_t *obj, DBT *data);
+void objdecode(object_t *obj, DBT *data);
+int bt_handle_cmp(DB *dbp, const DBT *a_, const DBT *b_);
 
 
 bool initworldstate(worldstate_t *ws)
@@ -70,6 +83,7 @@ void destroyworldstate(worldstate_t *ws)
     while(key = d_set_nextkey(ws->rooms), key != D_SET_INVALIDKEY) {
         d_set_fetch(ws->rooms, key, (void **)&room);
         d_tilemap_delete(room->map);
+        d_image_delete(room->bg);
         room->map = NULL;
     }
     d_set_delete(ws->rooms);
@@ -190,6 +204,113 @@ void loadpalette(char *filename, d_palette_t *palette)
     d_file_read(file, palette->clut, D_NCLUTITEMS*D_BYTESPERCOLOR);
     d_file_close(file);
     return;
+}
+
+
+void objencode(object_t *obj, DBT *data)
+{
+    int i;
+    byte bytebuf;
+    word wordbuf;
+
+    data->size = strlen(obj->name)+1 + sizeof(roomhandle_t) +
+                 6*sizeof(word) + 1 + 2*sizeof(word) +
+                 strlen(obj->spname)+1;
+    data->data = malloc(data->size);
+    i = 0;
+    memcpy(data->data, obj->name, strlen(obj->name)+1);
+    i += strlen(obj->name)+1;
+    wordbuf = htons(obj->location);
+    memcpy(data->data+i, &wordbuf, sizeof(roomhandle_t));
+    i += sizeof(roomhandle_t);
+    wordbuf = htons(obj->x);
+    memcpy(data->data+i, &wordbuf, sizeof(word));
+    i += sizeof(word);
+    wordbuf = htons(obj->y);
+    memcpy(data->data+i, &wordbuf, sizeof(word));
+    i += sizeof(word);
+    wordbuf = htons(obj->ax);
+    memcpy(data->data+i, &wordbuf, sizeof(word));
+    i += sizeof(word);
+    wordbuf = htons(obj->ay);
+    memcpy(data->data+i, &wordbuf, sizeof(word));
+    i += sizeof(word);
+    wordbuf = htons(obj->vx);
+    memcpy(data->data+i, &wordbuf, sizeof(word));
+    i += sizeof(word);
+    wordbuf = htons(obj->vy);
+    memcpy(data->data+i, &wordbuf, sizeof(word));
+    i += sizeof(word);
+    bytebuf = 0;
+    bytebuf |= (obj->onground == true) ? 1:0;
+    bytebuf |= (obj->facing == left) ? 2:0;
+    memcpy(data->data+i, &bytebuf, 1);
+    i++;
+    wordbuf = htons(obj->hp);
+    memcpy(data->data+i, &wordbuf, sizeof(word));
+    i += sizeof(word);
+    wordbuf = htons(obj->maxhp);
+    memcpy(data->data+i, &wordbuf, sizeof(word));
+    i += sizeof(word);
+    memcpy(data->data+i, obj->spname, strlen(obj->spname)+1);
+    return;
+}
+
+
+void objdecode(object_t *obj, DBT *data)
+{
+    int i;
+    byte bytebuf;
+    word wordbuf;
+
+    i = 0;
+    obj->name = malloc(strlen(data->data)+1);
+    memcpy(obj->name, data->data, strlen(data->data)+1);
+    i += strlen(data->data)+1;
+    memcpy(&wordbuf, data->data+i, sizeof(roomhandle_t));
+    i += sizeof(roomhandle_t);
+    obj->location = ntohs(wordbuf);
+    memcpy(&wordbuf, data->data+i, sizeof(word));
+    i += sizeof(word);
+    obj->x = ntohs(wordbuf);
+    memcpy(&wordbuf, data->data+i, sizeof(word));
+    i += sizeof(word);
+    obj->y = ntohs(wordbuf);
+    memcpy(&wordbuf, data->data+i, sizeof(word));
+    i += sizeof(word);
+    obj->ax = ntohs(wordbuf);
+    memcpy(&wordbuf, data->data+i, sizeof(word));
+    i += sizeof(word);
+    obj->ay = ntohs(wordbuf);
+    memcpy(&wordbuf, data->data+i, sizeof(word));
+    i += sizeof(word);
+    obj->vx = ntohs(wordbuf);
+    memcpy(&wordbuf, data->data+i, sizeof(word));
+    i += sizeof(word);
+    obj->vy = ntohs(wordbuf);
+    memcpy(&bytebuf, data->data+i, 1);
+    i++;
+    obj->onground = (bytebuf&1) ? true:false;
+    obj->facing = (bytebuf&2) ? left:right;
+    memcpy(&wordbuf, data->data+i, sizeof(word));
+    i += sizeof(word);
+    obj->hp = ntohs(wordbuf);
+    memcpy(&wordbuf, data->data+i, sizeof(word));
+    i += sizeof(word);
+    obj->maxhp = ntohs(wordbuf);
+    obj->spname = malloc(strlen(data->data+i)+1);
+    memcpy(obj->spname, data->data+i, strlen(data->data+i)+1);
+    return;
+}
+
+
+int bt_handle_cmp(DB *dbp, const DBT *a_, const DBT *b_)
+{
+    word a, b;
+
+    memcpy(&a, a_->data, sizeof(word));
+    memcpy(&b, b_->data, sizeof(word));
+    return (int)a - (int)b;
 }
 
 /* EOF datacommon.c */

@@ -1,7 +1,7 @@
 /* 
  * local.c
  * Created: Sat Jul 14 23:30:18 2001 by tek@wiw.org
- * Revised: Thu Jul 19 21:21:17 2001 by tek@wiw.org
+ * Revised: Fri Jul 20 04:00:54 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -21,6 +21,16 @@
 #include <dentata/memory.h>
 #include <dentata/error.h>
 #include <dentata/set.h>
+
+#include <sys/types.h>
+#include <limits.h>
+#include <db.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <netinet/in.h>
 
 #include <lua.h>
 

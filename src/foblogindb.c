@@ -1,7 +1,7 @@
 /* 
  * foblogindb.c
  * Created: Thu Jul 19 17:25:20 2001 by tek@wiw.org
- * Revised: Fri Jul 20 00:22:50 2001 by tek@wiw.org
+ * Revised: Fri Jul 20 03:42:39 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -50,10 +50,12 @@ int main(int argc, char **argv)
     loginrec_t loginrec;
     int i, comspec = 0;
     word wordbuf;
+    char *field, *value;
 
     memset(&key, 0, sizeof(key));
     memset(&data, 0, sizeof(data));
     memset(&loginrec, 0, sizeof(loginrec));
+    field = value = NULL;
 
     for(i = 1; i < argc; i++) {
         if(argv[i][0] == '-') {
@@ -79,6 +81,15 @@ int main(int argc, char **argv)
                 } else {
                     loginrec.object = atoi(argv[i]);
                 }
+            } else if(command == CHANGE) {
+                if(key.data == NULL) {
+                    key.data = argv[i];
+                    key.size = strlen(key.data)+1;
+                } else if(field == NULL) {
+                    field = argv[i];
+                } else {
+                    value = argv[i];
+                }
             } else if(command == REMOVE ||
                       command == VIEW) {
                 if(key.data == NULL) {
@@ -93,6 +104,9 @@ int main(int argc, char **argv)
         }
     }
 
+    if(command == CHANGE && (field == NULL || value == NULL))
+        command = HELP;
+
     i = db_create(&dbp, NULL, 0);
     if(i != 0) {
         fprintf(stderr, "%s: db_create: %s\n", PROGNAME, db_strerror(i));
@@ -106,12 +120,50 @@ int main(int argc, char **argv)
     }
 
     switch(command) {
+    default:
     case HELP:
-        printf("command: HELP, CREATE, ADD, REMOVE, VIEW, CHANGE\n");
+        printf("commands: help\n"
+               "          create\n"
+               "          add <name> <password> <object>\n"
+               "          remove <name>\n"
+               "          view <name>\n"
+               "          change <name> <field> <value>\n");
         break;
 
     case CREATE:
+        break;
+
     case CHANGE:
+        i = dbp->get(dbp, NULL, &key, &data, 0);
+        if(i != 0) {
+            dbp->err(dbp, i, "dbp->get");
+            exit(EXIT_FAILURE);
+        }
+        loginrec.password = data.data;
+        memcpy(&wordbuf, data.data+strlen(loginrec.password)+1,
+               sizeof(wordbuf));
+        loginrec.object = ntohs(wordbuf);
+
+        if(strcmp(field, "password") == 0) {
+            loginrec.password = value;
+        } else if(strcmp(field, "object") == 0) {
+            loginrec.object = atoi(value);
+        } else {
+            fprintf(stderr, "Invalid field ``%s''\n", field);
+            exit(EXIT_FAILURE);
+        }
+
+        data.size = strlen(loginrec.password)+1+sizeof(loginrec.object);
+        data.data = malloc(data.size);
+        memcpy(data.data, loginrec.password, strlen(loginrec.password)+1);
+        wordbuf = htons(loginrec.object);
+        memcpy(data.data+strlen(loginrec.password)+1, &wordbuf,
+               sizeof(wordbuf));
+        i = dbp->put(dbp, NULL, &key, &data, 0);
+        if(i != 0) {
+            dbp->err(dbp, i, "dbp->put");
+            exit(EXIT_FAILURE);
+        }
         break;
 
     case REMOVE:
@@ -129,7 +181,7 @@ int main(int argc, char **argv)
         wordbuf = htons(loginrec.object);
         memcpy(data.data+strlen(loginrec.password)+1, &wordbuf,
                sizeof(wordbuf));
-        i = dbp->put(dbp, NULL, &key, &data, 0);
+        i = dbp->put(dbp, NULL, &key, &data, DB_NOOVERWRITE);
         if(i != 0) {
             dbp->err(dbp, i, "dbp->put");
             exit(EXIT_FAILURE);

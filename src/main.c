@@ -1,7 +1,7 @@
 /* 
  * main.c
  * Created: Sat Jul 14 23:07:02 2001 by tek@wiw.org
- * Revised: Fri Jul 20 00:13:51 2001 by tek@wiw.org
+ * Revised: Fri Jul 20 04:00:44 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -24,6 +24,16 @@
 #include <dentata/set.h>
 #include <dentata/color.h>
 #include <dentata/memory.h>
+
+#include <sys/types.h>
+#include <limits.h>
+#include <db.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <netinet/in.h>
 
 #include <lua.h>
 

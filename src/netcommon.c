@@ -1,7 +1,7 @@
 /* 
  * netcommon.c
  * Created: Thu Jul 19 18:01:48 2001 by tek@wiw.org
- * Revised: Thu Jul 19 22:13:59 2001 by tek@wiw.org
+ * Revised: Fri Jul 20 05:55:45 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -32,6 +32,16 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+#include <sys/types.h>
+#include <limits.h>
+#include <db.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <netinet/in.h>
 
 #include <netdb.h>
 #include <sys/types.h>
@@ -217,8 +227,20 @@ bool readpack(int socket, packet_t *p)
             p->body.room.mapname = NULL;
         p->body.room.map = NULL;
 
+        READDWORD(dwordbuf, dwordbuf);
+        if(dwordbuf > 0) {
+            p->body.room.bgname = d_memory_new(dwordbuf);
+            if(p->body.room.bgname == NULL)
+                return failure;
+            i = read(socket, p->body.room.bgname, dwordbuf);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        } else
+            p->body.room.bgname = NULL;
+        p->body.room.bg = NULL;
+
         /* contents */
-        p->body.room.objs = NULL;
+        p->body.room.contents = NULL;
 
         /* scripts */
         break;
@@ -350,6 +372,14 @@ bool writepack(int socket, packet_t p)
         if(strlen(p.body.room.mapname) > 0) {
             i = write(socket, p.body.room.mapname,
                       strlen(p.body.room.mapname)+1);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        }
+
+        WRITEDWORD(strlen(p.body.room.bgname)+1, dwordbuf);
+        if(strlen(p.body.room.bgname) > 0) {
+            i = write(socket, p.body.room.bgname,
+                      strlen(p.body.room.bgname)+1);
             if(i == -1) goto error;
             if(i == 0) return failure;
         }

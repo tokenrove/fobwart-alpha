@@ -1,7 +1,7 @@
 /* 
  * fobserv.c
  * Created: Wed Jul 18 03:15:09 2001 by tek@wiw.org
- * Revised: Fri Jul 20 00:49:13 2001 by tek@wiw.org
+ * Revised: Fri Jul 20 06:17:03 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -55,7 +55,11 @@ bool loadservdata(serverdata_t *sd);
 void sendevents(serverdata_t *sd);
 void mainloop(serverdata_t *sd);
 bool loadlogindb(serverdata_t *sd);
+void closelogindb(serverdata_t *sd);
 bool verifylogin(serverdata_t *sd, char *name, char *pw, objhandle_t *object);
+bool loadobjectdb(serverdata_t *sd);
+void closeobjectdb(serverdata_t *sd);
+bool getobject(serverdata_t *sd, objhandle_t key);
 
 
 int main(void)
@@ -69,15 +73,21 @@ int main(void)
         exit(EXIT_FAILURE);
     }
 
-    status = loadservdata(&sd);
-    if(status != success) {
-        fprintf(stderr, "%s: failed to load initial data.\n", PROGNAME);
-        exit(EXIT_FAILURE);
-    }
-
     status = loadlogindb(&sd);
     if(status != success) {
         fprintf(stderr, "%s: failed to load login.db.\n", PROGNAME);
+        exit(EXIT_FAILURE);
+    }
+
+    status = loadobjectdb(&sd);
+    if(status != success) {
+        fprintf(stderr, "%s: failed to load object.db.\n", PROGNAME);
+        exit(EXIT_FAILURE);
+    }
+
+    status = loadservdata(&sd);
+    if(status != success) {
+        fprintf(stderr, "%s: failed to load initial data.\n", PROGNAME);
         exit(EXIT_FAILURE);
     }
 
@@ -99,6 +109,8 @@ int main(void)
 
     evsk_delete(&sd.evsk);
     d_set_delete(sd.clients);
+    closeobjectdb(&sd);
+    closelogindb(&sd);
     destroyworldstate(&sd.ws);
 
     exit(EXIT_SUCCESS);
@@ -279,7 +291,7 @@ int initlisten(int *sock)
 
 bool loadservdata(serverdata_t *sd)
 {
-    object_t *o;
+    dword key;
     room_t *room;
     bool status;
     char *s;
@@ -297,53 +309,24 @@ bool loadservdata(serverdata_t *sd)
     room->islit = true;
     room->gravity = 2;
     room->mapname = "rlevel";
-    room->map = loadtmap(DATADIR "/rlevel.map");    
+    s = d_memory_new(strlen(DATADIR)+strlen(room->mapname)+6);
+    sprintf(s, "%s/%s.map", DATADIR, room->mapname);
+    room->map = loadtmap(s);
+    d_memory_delete(s);
+    room->bgname = "stars";
+    room->bg = NULL;
+    room->contents = d_set_new(0);
+    d_set_add(room->contents, 0, NULL);
+    d_set_add(room->contents, 1, NULL);
 
     /* load object db */
     sd->ws.objs = d_set_new(0);
     if(sd->ws.objs == NULL) return failure;
-    o = d_memory_new(sizeof(object_t));
-    if(o == NULL) return failure;
-    o->handle = d_set_getunusedkey(sd->ws.objs);
-    status = d_set_add(sd->ws.objs, o->handle, (void *)o);
-    if(status == failure) return failure;
-    o->spname = "phibes";
-    s = d_memory_new(strlen(DATADIR)+strlen(o->spname)+6);
-    sprintf(s, "%s/%s.spr", DATADIR, o->spname);
-    o->sprite = loadsprite(s);
-    d_memory_delete(s);
-    if(o->sprite == NULL) return failure;
-    o->name = "Phibes";
-    o->ax = o->vx = o->vy = 0;
-    o->location = room->handle;
-    o->ay = room->gravity;
-    o->onground = false;
-    o->x = 64;
-    o->y = 64;
-    o->maxhp = 412;
-    o->hp = 200;
-
-    o = d_memory_new(sizeof(object_t));
-    if(o == NULL) return failure;
-    o->handle = d_set_getunusedkey(sd->ws.objs);
-    status = d_set_add(sd->ws.objs, o->handle, (void *)o);
-    if(status == failure) return failure;
-    o->spname = "obs";
-    s = d_memory_new(strlen(DATADIR)+strlen(o->spname)+6);
-    sprintf(s, "%s/%s.spr", DATADIR, o->spname);
-    o->sprite = loadsprite(s);
-    d_memory_delete(s);
-    if(o->sprite == NULL) return failure;
-    o->name = "Obs";
-    o->ax = o->vx = o->vy = 0;
-    o->ay = room->gravity;
-    o->location = room->handle;
-    o->onground = false;
-    o->x = 64;
-    o->y = 64;
-    o->maxhp = 412;
-    o->hp = 412;
-    
+    d_set_resetiteration(room->contents);
+    while(key = d_set_nextkey(room->contents), key != D_SET_INVALIDKEY) {
+        if(getobject(sd, key) != success)
+            return failure;
+    }
     return success;
 }
 
@@ -402,8 +385,17 @@ int handleclient(client_t *cli, serverdata_t *sd)
 
         case PACK_GETOBJECT:
             status = d_set_fetch(sd->ws.objs, p.body.handle, (void **)&o);
-            if(status == failure)
-                return -1;
+            if(status == failure) {
+                fprintf(stderr, "failed to fetch requested object %d\n",
+                        p.body.handle);
+                status = getobject(sd, p.body.handle);
+                if(status == failure)
+                    return -1;
+
+                status = d_set_fetch(sd->ws.objs, p.body.handle, (void **)&o);
+                if(status == failure)
+                    return -1;
+            }
             p.type = PACK_OBJECT;
             p.body.object = *o;
             writepack(cli->socket, p);
@@ -484,6 +476,76 @@ bool verifylogin(serverdata_t *sd, char *name, char *pw, objhandle_t *object)
         return failure;
 
     *object = loginrec.object;
+    return success;
+}
+
+
+bool loadobjectdb(serverdata_t *sd)
+{
+    int i;
+
+    i = db_create(&sd->objectdbp, NULL, 0);
+    if(i != 0) {
+        fprintf(stderr, "%s: db_create: %s\n", PROGNAME, db_strerror(i));
+        return failure;
+    }
+
+    i = sd->objectdbp->set_bt_compare(sd->objectdbp, bt_handle_cmp);
+    if(i != 0) {
+        sd->objectdbp->err(sd->objectdbp, i, "%s", "set_bt_compare");
+        return failure;
+    }
+
+    i = sd->objectdbp->open(sd->objectdbp, "object.db", NULL, DB_BTREE,
+                            DB_CREATE, 0664);
+    if(i != 0) {
+        sd->objectdbp->err(sd->objectdbp, i, "%s", "object.db");
+        return failure;
+    }
+
+    return success;
+}
+
+
+void closeobjectdb(serverdata_t *sd)
+{
+    sd->objectdbp->close(sd->objectdbp, 0);
+    return;
+}
+
+
+bool getobject(serverdata_t *sd, objhandle_t handle)
+{
+    object_t *o;
+    DBT key, data;
+    int i;
+    char *s;
+    bool status;
+
+    key.size = sizeof(objhandle_t);
+    key.data = malloc(key.size);
+    memcpy(key.data, &handle, key.size);
+    memset(&data, 0, sizeof(data));
+
+    i = sd->objectdbp->get(sd->objectdbp, NULL, &key, &data, 0);
+    if(i != 0) {
+        sd->objectdbp->err(sd->objectdbp, i, "dbp->get");
+        free(key.data);
+        return failure;
+    }
+
+    o = d_memory_new(sizeof(object_t));
+    if(o == NULL) return failure;
+    o->handle = handle;
+    status = d_set_add(sd->ws.objs, o->handle, (void *)o);
+    if(status == failure) return failure;
+    objdecode(o, &data);
+    s = d_memory_new(strlen(DATADIR)+strlen(o->spname)+6);
+    sprintf(s, "%s/%s.spr", DATADIR, o->spname);
+    o->sprite = loadsprite(s);
+    d_memory_delete(s);
+    if(o->sprite == NULL) return failure;
+    free(key.data);
     return success;
 }
 

@@ -1,7 +1,7 @@
 /* 
  * fobwart.h
  * Created: Sat Jul 14 23:23:21 2001 by tek@wiw.org
- * Revised: Thu Jul 19 22:22:09 2001 by tek@wiw.org
+ * Revised: Fri Jul 20 05:55:01 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -81,13 +81,17 @@ typedef struct room_s {
     int gravity;
     bool islit;
 
-    /* tilemaps */
+    /* graphics */
     char *mapname;
     d_tilemap_t *map;
     word tmhandle;
 
+    char *bgname;
+    d_image_t *bg;
+    word bghandle;
+
     /* contents */
-    d_set_t *objs;
+    d_set_t *contents;
 
     /* scripts */
 } room_t;
@@ -149,5 +153,8 @@ extern void loadpalette(char *filename, d_palette_t *palette);
 extern void updatephysics(worldstate_t *ws);
 extern bool initworldstate(worldstate_t *ws);
 extern void destroyworldstate(worldstate_t *ws);
+extern void objencode(object_t *obj, DBT *data);
+extern void objdecode(object_t *obj, DBT *data);
+extern int bt_handle_cmp(DB *dbp, const DBT *a_, const DBT *b_);
 
 /* EOF fobwart.h */

@@ -1,7 +1,7 @@
 /* 
  * decor.c
  * Created: Sun Jul 15 05:52:57 2001 by tek@wiw.org
- * Revised: Thu Jul 19 19:25:40 2001 by tek@wiw.org
+ * Revised: Fri Jul 20 04:01:31 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -21,6 +21,16 @@
 #include <dentata/audio.h>
 #include <dentata/s3m.h>
 #include <dentata/set.h>
+
+#include <sys/types.h>
+#include <limits.h>
+#include <db.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <netinet/in.h>
 
 #include <lua.h>
 

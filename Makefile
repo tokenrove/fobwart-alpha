@@ -31,7 +31,7 @@ SERVDATA=
 SERVPROG=fobserv
 SERVHEADERS=fobwart.h fobserv.h
 
-UTILS=sprcomp tmapcomp foblogindb
+UTILS=sprcomp tmapcomp foblogindb fobobjectdb
 
 .phony: default
 
@@ -45,6 +45,9 @@ $(SERVPROG): $(SERVOBJS) $(SERVDATA)
 
 $(UTILS): %: %.o
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+
+fobobjectdb: fobobjectdb.o datacommon.o
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 $(CLIOBJS): $(CLIHEADERS)
 $(SERVOBJS): $(SERVHEADERS)
