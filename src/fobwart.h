@@ -1,7 +1,7 @@
 /* 
  * fobwart.h
  * Created: Sat Jul 14 23:23:21 2001 by tek@wiw.org
- * Revised: Wed Jul 18 02:24:02 2001 by tek@wiw.org
+ * Revised: Wed Jul 18 20:47:50 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -97,7 +97,7 @@ typedef struct room_s {
 
 
 typedef struct event_s {
-    word subject, object;
+    word subject;
     byte verb;
     void *auxdata;
     dword auxlen;

@@ -1,7 +1,7 @@
 /* 
  * localdat.c
  * Created: Sat Jul 14 23:40:37 2001 by tek@wiw.org
- * Revised: Wed Jul 18 00:28:31 2001 by tek@wiw.org
+ * Revised: Wed Jul 18 22:11:45 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -50,7 +50,6 @@ bool loaddata(gamedata_t *gd)
 
     gd->objs = d_set_new(0);
     if(gd->objs == NULL) return failure;
-    gd->localobj = 0;
     o = d_memory_new(sizeof(object_t));
     if(o == NULL) return failure;
     status = d_set_add(gd->objs, gd->localobj, (void *)o);

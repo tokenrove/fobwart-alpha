@@ -1,7 +1,7 @@
 /* 
  * main.c
  * Created: Sat Jul 14 23:07:02 2001 by tek@wiw.org
- * Revised: Wed Jul 18 04:26:14 2001 by tek@wiw.org
+ * Revised: Wed Jul 18 22:12:17 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -68,7 +68,9 @@ int main(int argc, char **argv)
     gd.mbuf.maxlines = 42;
     gd.mbuf.lines = d_memory_new(sizeof(byte *)*gd.mbuf.maxlines);
 
-    /* establish server connection */
+    /* login */
+    login(&gd, "tek", "dwarfinvasion");
+    
     /* load data from server */
     status = loaddata(&gd);
     if(status == failure) {
@@ -131,8 +133,9 @@ void mainloop(gamedata_t *gd)
             handleinput(gd);
             /* dispatch events */
             /* sync info with server */
-            processevents(gd);
+            syncevents(gd);
             /* do physics calculation */
+            processevents(gd);
             updatephysics(gd);
             gd->slowcount = 0;
         }

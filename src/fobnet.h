@@ -1,7 +1,7 @@
 /* 
  * fobnet.h
  * Created: Wed Jul 18 03:53:16 2001 by tek@wiw.org
- * Revised: Wed Jul 18 04:12:35 2001 by tek@wiw.org
+ * Revised: Wed Jul 18 21:47:32 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -18,6 +18,11 @@ typedef struct packet_s {
     byte type;
     union {
         byte handshake;
+        word handle;
+        struct {
+            byte *name, *password;
+            int namelen, pwlen;
+        } login;
         event_t event;
     } body;
 } packet_t;

@@ -1,7 +1,7 @@
 /* 
  * fobserv.c
  * Created: Wed Jul 18 03:15:09 2001 by tek@wiw.org
- * Revised: Wed Jul 18 17:11:25 2001 by tek@wiw.org
+ * Revised: Wed Jul 18 22:12:40 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -52,7 +52,7 @@ typedef struct client_s {
 } client_t;
 
 int initlisten(int *sock);
-int handleclient(client_t *cli);
+int handleclient(client_t *cli, eventstack_t *evsk);
 int handshake(int clisock);
 
 int main(void)
@@ -65,6 +65,7 @@ int main(void)
     dword key;
     struct timeval timeout;
     bool status;
+    eventstack_t evsk;
 
     if(initlisten(&servsock) == -1) {
         fprintf(stderr, "%s: failed to initialize listening socket.\n",
@@ -77,6 +78,8 @@ int main(void)
         fprintf(stderr, "%s: unable to allocate client set.\n", PROGNAME);
         exit(EXIT_FAILURE);
     }
+
+    evsk_new(&evsk);
 
     while(1) {
         FD_ZERO(&readfds);
@@ -112,20 +115,20 @@ int main(void)
                 if(status != success)
                     fprintf(stderr, "%s: d_set_add failed\n", PROGNAME);
             }
-
         }
 
         d_set_resetiteration(clients);
         while(key = d_set_nextkey(clients), key != D_SET_INVALIDKEY) {
             d_set_fetch(clients, key, (void **)&cli);
             if(FD_ISSET(cli->socket, &readfds))
-                if(handleclient(cli) == -1) {
+                if(handleclient(cli, &evsk) == -1) {
                     close(cli->socket);
                     d_set_remove(clients, key);
                 }
         }
     }
 
+    evsk_delete(&evsk);
     d_set_delete(clients);
 
     exit(EXIT_SUCCESS);
@@ -147,10 +150,6 @@ int handshake(int clisock)
         return -1;
     }
     printf("handshake: %d\n", p.body.handshake);
-
-    p.type = PACK_AYUP;
-    p.body.handshake = 66;
-    writepack(clisock, p);
     return 0;
 }
 
@@ -174,7 +173,7 @@ int initlisten(int *sock)
     return 0;
 }
 
-int handleclient(client_t *cli)
+int handleclient(client_t *cli, eventstack_t *evsk)
 {
     packet_t p;
 
@@ -182,13 +181,30 @@ int handleclient(client_t *cli)
 
     switch(cli->state) {
     case 0: /* expect login, all other packets rejected */
-            
-        break;
-            
-    case 1: /* expect sync */
+        if(p.type == PACK_LOGIN) {
+            fprintf(stderr, "Login from %d (%s/%s)\n", cli->handle,
+                    p.body.login.name, p.body.login.password);
+            p.type = PACK_AYUP;
+            p.body.handle = cli->handle;
+            if(writepack(cli->socket, p) == failure) return -1;
+            cli->state++;
+
+        } else {
+            fprintf(stderr, "%d tried to skip login phase.\n",
+                    cli->handle);
+            return -1;
+        }
         break;
 
+    case 1: /* expect sync */
     case 2: /* events */
+        if(p.type == PACK_EVENT) {
+            fprintf(stderr, "Got event from %d [calls itself %d]: %d + ``%s''\n",
+                    cli->handle, p.body.event.subject, p.body.event.verb,
+                    (p.body.event.auxlen)?p.body.event.auxdata:"");
+            evsk_push(evsk, p.body.event);
+            evsk_pop(evsk);
+        }
         break;
     }
 

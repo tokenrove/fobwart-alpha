@@ -1,7 +1,7 @@
 /* 
  * local.c
  * Created: Sat Jul 14 23:30:18 2001 by tek@wiw.org
- * Revised: Tue Jul 17 19:39:52 2001 by tek@wiw.org
+ * Revised: Wed Jul 18 20:55:47 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -276,16 +276,19 @@ void handlegameinput(gamedata_t *gd)
         ev.subject = gd->localobj;
         ev.verb = VERB_RIGHT;
         ev.auxdata = NULL;
+        ev.auxlen = 0;
         evsk_push(&gd->evsk, ev);
     } else if(d_event_ispressed(EV_LEFT)) {
         ev.subject = gd->localobj;
         ev.verb = VERB_LEFT;
         ev.auxdata = NULL;
+        ev.auxlen = 0;
         evsk_push(&gd->evsk, ev);
     } else {
         ev.subject = gd->localobj;
         ev.verb = VERB_AUTO;
         ev.auxdata = NULL;
+        ev.auxlen = 0;
         evsk_push(&gd->evsk, ev);
     }
 
@@ -293,6 +296,7 @@ void handlegameinput(gamedata_t *gd)
         ev.subject = gd->localobj;
         ev.verb = VERB_ACT;
         ev.auxdata = NULL;
+        ev.auxlen = 0;
         evsk_push(&gd->evsk, ev);
     }
 
@@ -303,6 +307,7 @@ void handlegameinput(gamedata_t *gd)
         ev.subject = gd->localobj;
         ev.verb = VERB_JUMP;
         ev.auxdata = NULL;
+        ev.auxlen = 0;
         evsk_push(&gd->evsk, ev);
     }
     if(d_event_ispressed(EV_TALK) && !gd->bounce[EV_TALK])
