@@ -58,12 +58,17 @@ int main(void)
     sd.logindb = newdbh();
     status = loadlogindb(sd.logindb);
     if(status != success)
-        d_error_fatal("%s: failed to load login.db.\n", PROGNAME);
+        d_error_fatal("%s: failed to load login db.\n", PROGNAME);
 
     sd.objectdb = newdbh();
     status = loadobjectdb(sd.objectdb);
     if(status != success)
-        d_error_fatal("%s: failed to load object.db.\n", PROGNAME);
+        d_error_fatal("%s: failed to load object db.\n", PROGNAME);
+
+    sd.roomdb = newdbh();
+    status = loadroomdb(sd.roomdb);
+    if(status != success)
+        d_error_fatal("%s: failed to load room db.\n", PROGNAME);
 
     status = loadservdata(&sd);
     if(status != success)
@@ -234,21 +239,18 @@ bool loadservdata(serverdata_t *sd)
     /* load room db */
     sd->ws.rooms = d_set_new(0);
     if(sd->ws.rooms == NULL) return failure;
-
+    
     room = d_memory_new(sizeof(room_t));
     if(room == NULL) return failure;
-    room->handle = d_set_getunusedkey(sd->ws.rooms);
+    room->handle = 0;
     status = d_set_add(sd->ws.rooms, room->handle, (void *)room);
     if(status == failure) return failure;
-    room->name = "nowhere";
-    room->islit = true;
-    room->gravity = 2;
-    room->mapname = "room00";
-    room->bgname = "stars";
-    room->contents = d_set_new(0);
-    d_set_add(room->contents, 0, NULL);
-    d_set_add(room->contents, 1, NULL);
-    d_set_add(room->contents, 2, NULL);
+
+    /* The procedure for loading all rooms that will be here eventually
+     * will either use a database cursor or will load a specified default
+     * room and then traverse all connections from that room */
+    status = roomdb_get(sd->roomdb, room->handle, room);
+    if(status == failure) return failure;
     deskelroom(room);
 
     /* load object db */

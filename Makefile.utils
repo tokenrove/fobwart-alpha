@@ -19,6 +19,14 @@ edobject: $(EDOBJECTOBJS)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 
+EDROOMOBJS=edroom.o db.o
+EDROOMHEADERS=fobwart.h fobdb.h
+
+$(EDROOMOBJS): $(EDROOMHEADERS)
+edroom: $(EDROOMOBJS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+
 SPRCOMPOBJS=sprcomp.o
 SPRCOMPHEADERS=
 

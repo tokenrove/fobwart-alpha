@@ -156,4 +156,4 @@ int main(int argc, char **argv)
     exit(EXIT_SUCCESS);
 }
 
-/* EOF foblogindb.c */
+/* EOF edlogin.c */

@@ -30,7 +30,7 @@ COMMONDATA=data/defobj.luc data/tek.luc data/obs.luc data/carlos.luc \
 
 CLIPROG=fobwart
 SERVPROG=fobserv
-UTILS=sprcomp tmapcomp edlogin edobject
+UTILS=sprcomp tmapcomp edlogin edobject edroom
 
 .phony: default
 

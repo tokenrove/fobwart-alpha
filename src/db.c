@@ -58,6 +58,12 @@ bool objectdb_get(dbhandle_t *db_, objhandle_t handle, object_t *o);
 bool objectdb_put(dbhandle_t *db_, objhandle_t handle, object_t *o);
 bool objectdb_remove(dbhandle_t *dbh_, objhandle_t handle);
 
+bool loadroomdb(dbhandle_t *db_);
+void closeroomdb(dbhandle_t *db_);
+bool roomdb_get(dbhandle_t *db_, roomhandle_t handle, room_t *room);
+bool roomdb_put(dbhandle_t *db_, roomhandle_t handle, room_t *room);
+bool roomdb_remove(dbhandle_t *dbh_, roomhandle_t handle);
+
 bool loadlogindb(dbhandle_t *db_);
 void closelogindb(dbhandle_t *db_);
 bool verifylogin(dbhandle_t *db_, char *name, char *pw, objhandle_t *object);
@@ -328,6 +334,108 @@ void objdecode(object_t *obj, DBT *data)
            &obj->maxhp, &obj->spname);
     obj->onground = (bytebuf&1)?true:false;
     return;
+}
+
+
+bool loadroomdb(dbhandle_t *db_)
+{
+    int i;
+    dbinternal_t *db = db_;
+
+    i = db_create(&db->p, NULL, 0);
+    if(i != 0) {
+        d_error_debug(__FUNCTION__": db_create: %s\n", db_strerror(i));
+        return failure;
+    }
+
+    i = db->p->set_bt_compare(db->p, bt_handle_cmp);
+    if(i != 0) {
+        db->p->err(db->p, i, "%s", "set_bt_compare");
+        return failure;
+    }
+
+    i = db->p->open(db->p, ROOMDB, NULL, DB_BTREE, DB_CREATE, 0664);
+    if(i != 0) {
+        db->p->err(db->p, i, "%s", ROOMDB);
+        return failure;
+    }
+
+    return success;
+}
+
+
+void closeroomdb(dbhandle_t *db_)
+{
+    dbinternal_t *db = db_;
+
+    db->p->close(db->p, 0);
+    return;
+}
+
+
+bool roomdb_get(dbhandle_t *db_, roomhandle_t handle, room_t *room)
+{
+    DBT key, data;
+    dbinternal_t *db = db_;
+    int i;
+
+    d_memory_set(&key, 0, sizeof(key));
+    d_memory_set(&data, 0, sizeof(data));
+    key.size = sizeof(roomhandle_t);
+    key.data = &handle;
+
+    i = db->p->get(db->p, NULL, &key, &data, 0);
+    if(i != 0) {
+        db->p->err(db->p, i, "dbp->get");
+        return failure;
+    }
+
+    roomdecode(room, &data);
+    return success;
+}
+
+
+bool roomdb_put(dbhandle_t *db_, roomhandle_t handle, room_t *room)
+{
+    DBT key, data;
+    dbinternal_t *db = db_;
+    int i;
+
+    d_memory_set(&key, 0, sizeof(key));
+    d_memory_set(&data, 0, sizeof(data));
+    key.size = sizeof(roomhandle_t);
+    key.data = &handle;
+
+    roomencode(room, &data);
+
+    i = db->p->put(db->p, NULL, &key, &data, 0);
+    if(i != 0) {
+        db->p->err(db->p, i, "dbp->put");
+        return failure;
+    }
+
+    d_memory_delete(data.data);
+    return success;
+}
+
+
+bool roomdb_remove(dbhandle_t *db_, roomhandle_t handle)
+{
+    DBT key;
+    dbinternal_t *db = db_;
+    int i;
+
+    d_memory_set(&key, 0, sizeof(key));
+    key.size = sizeof(roomhandle_t);
+    key.data = &handle;
+
+    i = db->p->del(db->p, NULL, &key, 0);
+    if(i != 0) {
+        db->p->err(db->p, i, "dbp->del");
+        return failure;
+    }
+
+    return success;
 }
 
 
