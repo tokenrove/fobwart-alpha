@@ -105,6 +105,7 @@ void mainloop(serverdata_t *sd)
     bool status;
 
     nframed = 0;
+    nloggedin = 0;
 
     while(1) {
         /* set readfds */
@@ -144,7 +145,6 @@ void mainloop(serverdata_t *sd)
         }
 
         /* handle client requests */
-        nloggedin = 0;
         d_set_resetiteration(sd->clients);
         while(key = d_set_nextkey(sd->clients), key != D_SET_INVALIDKEY) {
             d_set_fetch(sd->clients, key, (void **)&cli);
@@ -153,8 +153,7 @@ void mainloop(serverdata_t *sd)
                 if(i == -1) {
                     close(cli->socket);
                     d_set_remove(sd->clients, key);
-                } else if(cli->state > 0)
-                    nloggedin++;
+                }
 
                 if(i == 1) {
                     nframed++;
@@ -163,6 +162,13 @@ void mainloop(serverdata_t *sd)
         }
 
         /* sync frames */
+        nloggedin = 0;
+        d_set_resetiteration(sd->clients);
+        while(key = d_set_nextkey(sd->clients), key != D_SET_INVALIDKEY) {
+            d_set_fetch(sd->clients, key, (void **)&cli);
+            if(cli->state > 0) nloggedin++;
+        }
+
         if(nframed == nloggedin) {
             processevents(sd);
             updatephysics(&sd->ws);
