@@ -1,7 +1,7 @@
 /* 
  * fobwart.h
  * Created: Sat Jul 14 23:23:21 2001 by tek@wiw.org
- * Revised: Wed Jul 18 20:47:50 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 18:43:15 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -167,5 +167,9 @@ extern bool initnet(gamedata_t *gd, char *servname, int port);
 extern void closenet(gamedata_t *gd);
 extern bool login(gamedata_t *gd, char *uname, char *password);
 extern void syncevents(gamedata_t *gd);
+extern bool getobject(gamedata_t *gd, word handle);
+extern d_sprite_t *loadsprite(char *fname);
+extern d_tilemap_t *loadtmap(char *filename);
+extern void loadpalette(char *filename, d_palette_t *palette);
 
 /* EOF fobwart.h */

@@ -1,7 +1,7 @@
 /* 
  * localdat.c
  * Created: Sat Jul 14 23:40:37 2001 by tek@wiw.org
- * Revised: Wed Jul 18 22:11:45 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 18:38:33 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -32,15 +32,11 @@ extern d_image_t *ebar_new(gamedata_t *gd);
 
 bool loaddata(gamedata_t *gd);
 void destroydata(gamedata_t *gd);
-d_sprite_t *loadsprite(char *fname);
-d_tilemap_t *loadtmap(char *filename);
-void loadpalette(char *filename, d_palette_t *palette);
 
 bool loaddata(gamedata_t *gd)
 {
     bool status;
     d_image_t *p;
-    object_t *o;
     room_t *room;
 
     gd->deffont = d_font_load(DEFFONTFNAME);
@@ -50,12 +46,6 @@ bool loaddata(gamedata_t *gd)
 
     gd->objs = d_set_new(0);
     if(gd->objs == NULL) return failure;
-    o = d_memory_new(sizeof(object_t));
-    if(o == NULL) return failure;
-    status = d_set_add(gd->objs, gd->localobj, (void *)o);
-    if(status == failure) return failure;
-    o->sprite = loadsprite(DATADIR "/phibes.spr");
-    o->name = "phibes";
 
     gd->rooms = d_set_new(0);
     if(gd->rooms == NULL) return failure;
@@ -79,10 +69,6 @@ bool loaddata(gamedata_t *gd)
     if(status == failure)
         return failure;
 
-    status = d_manager_addsprite(o->sprite, &o->sphandle, 0);
-    if(status == failure)
-        return failure;
-
     /* FIXME note: memory leak here */
     p = d_pcx_load(DATADIR "/stars.pcx");
     if(p == NULL)
@@ -102,6 +88,7 @@ bool loaddata(gamedata_t *gd)
     }
     return success;
 }
+
 
 void destroydata(gamedata_t *gd)
 {
@@ -135,117 +122,6 @@ void destroydata(gamedata_t *gd)
     gd->largefont = NULL;
     d_font_delete(gd->deffont);
     gd->deffont = NULL;
-    return;
-}
-
-d_sprite_t *loadsprite(char *filename)
-{
-    d_sprite_t *spr;
-    d_image_t *p;
-    d_file_t *file;
-    byte nanims, framelag, nframes;
-    dword checksum;
-    int i, j;
-    d_rasterdescription_t mode;
-
-    file = d_file_open(filename);
-    if(file == NULL)
-        return NULL;
-
-    spr = d_sprite_new();
-    if(spr == NULL)
-        return NULL;
-
-    nanims = d_file_getbyte(file);
-    framelag = d_file_getbyte(file);
-    checksum = d_file_getdword(file);
-    for(i = 0; i < nanims; i++) {
-        d_sprite_addanim(spr);
-        nframes = d_file_getbyte(file);
-        for(j = 0; j < nframes; j++) {
-            mode.w = d_file_getword(file);
-            mode.h = d_file_getword(file);
-            mode.bpp = d_file_getbyte(file);
-            mode.alpha = d_file_getbyte(file);
-            mode.cspace = RGB;
-            if(mode.bpp == 8)
-                mode.paletted = true;
-            else
-                mode.paletted = false;
-
-            p = d_image_new(mode);
-            if(p == NULL)
-                return NULL;
-
-            d_file_read(file, p->data, mode.w*mode.h*(mode.bpp/8));
-            if(mode.alpha > 0 && mode.bpp != 8)
-                d_file_read(file, p->alpha, (mode.w*mode.h*mode.alpha+7)/8);
-
-            d_sprite_addframe(spr, i, p);
-        }
-    }
-    d_sprite_setanimparameters(spr, framelag);
-
-    d_file_close(file);
-    return spr;
-}
-
-d_tilemap_t *loadtmap(char *filename)
-{
-    d_tilemap_t *tm;
-    d_file_t *file;
-    d_image_t *p;
-    word w, h;
-    d_rasterdescription_t mode;
-    dword checksum;
-    int i;
-    byte b;
-
-    file = d_file_open(filename);
-    if(file == NULL)
-        return NULL;
-
-    w = d_file_getword(file);
-    h = d_file_getword(file);
-    mode.w = d_file_getword(file);
-    mode.h = d_file_getword(file);
-    mode.bpp = d_file_getbyte(file);
-    mode.alpha = d_file_getbyte(file);
-    mode.cspace = RGB;
-    if(mode.bpp == 8) mode.paletted = true;
-    else mode.paletted = false;
-
-    checksum = d_file_getdword(file);
-
-    tm = d_tilemap_new(mode, w, h);
-    if(tm == NULL)
-        return NULL;
-
-    d_file_read(file, tm->map, w*h);
-    for(i = 0; i < 255; i++) {
-        p = NULL;
-        b = d_file_getbyte(file);
-        if(b == 1) {
-            p = d_image_new(mode);
-            d_file_read(file, p->data, mode.w*mode.h*(mode.bpp/8));
-            if(mode.alpha > 0 && mode.bpp != 8)
-                d_file_read(file, p->alpha, (mode.w*mode.h*mode.bpp+7)/8);
-        } else if(b != 0)
-            d_error_fatal(__FUNCTION__": b was %d!\n", b);
-        d_tilemap_addtileimage(tm, i, p);
-    }
-    return tm;
-}
-
-void loadpalette(char *filename, d_palette_t *palette)
-{
-    d_file_t *file;
-
-    file = d_file_open(filename);
-    if(file == NULL)
-        return;
-    d_file_read(file, palette->clut, D_NCLUTITEMS*D_BYTESPERCOLOR);
-    d_file_close(file);
     return;
 }
 

@@ -1,0 +1,14 @@
+
+fobwart alpha-zero by Daniel Barnes <dbarnes@wordplay.com> and
+                      Julian Squires <tek@wiw.org>
+
+Fobwart is a graphical MUD, with a client-side look-and-feel of
+the Megaman series of side-scrolling platform games.
+
+The general design here is very client-heavy, for a few reasons.
+One is that in this case, the servers which were available for
+our use were not as powerful as the clients in question. A second
+was that we wanted to minimize the amount of network activity
+while maintaining synchronization. The limitations, which were
+acceptable in this case, were that the clients would have to
+be trusted, and would have to process events deterministically.

@@ -1,7 +1,7 @@
 /* 
  * main.c
  * Created: Sat Jul 14 23:07:02 2001 by tek@wiw.org
- * Revised: Wed Jul 18 22:12:17 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 19:01:15 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -68,9 +68,6 @@ int main(int argc, char **argv)
     gd.mbuf.maxlines = 42;
     gd.mbuf.lines = d_memory_new(sizeof(byte *)*gd.mbuf.maxlines);
 
-    /* login */
-    login(&gd, "tek", "dwarfinvasion");
-    
     /* load data from server */
     status = loaddata(&gd);
     if(status == failure) {
@@ -78,6 +75,13 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    /* login */
+    status = login(&gd, "tek", "dwarfinvasion");
+    if(status != success) {
+        d_error_fatal("Login as %s failed.\n", "tek");
+        return 1;
+    }
+    
     /* enter main loop */
     mainloop(&gd);
 

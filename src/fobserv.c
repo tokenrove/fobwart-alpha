@@ -1,7 +1,7 @@
 /* 
  * fobserv.c
  * Created: Wed Jul 18 03:15:09 2001 by tek@wiw.org
- * Revised: Thu Jul 19 16:28:34 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 19:00:35 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -54,47 +54,56 @@ typedef struct client_s {
 typedef struct serverdata_s {
     d_set_t *rooms;
     d_set_t *objs;
+    d_set_t *clients;
+    eventstack_t evsk;
+    int socket;
 } serverdata_t;
 
 int initlisten(int *sock);
 int handleclient(client_t *cli, eventstack_t *evsk);
 int handshake(int clisock);
 void sendevents(d_set_t *clients, eventstack_t *evsk);
+bool loadservdata(serverdata_t *sd);
 
 int main(void)
 {
-    int servsock, clisock;
-    d_set_t *clients;
+    int clisock;
     client_t *cli;
-    int nfds, nframed, i;
+    int nfds, nframed, nloggedin, i;
     fd_set readfds, readfdbak;
     dword key;
     struct timeval timeout;
     bool status;
-    eventstack_t evsk;
+    serverdata_t sd;
 
-    if(initlisten(&servsock) == -1) {
+    status = loadservdata(&sd);
+    if(status != success) {
+        fprintf(stderr, "%s: failed to load initial data.\n", PROGNAME);
+        exit(EXIT_FAILURE);
+    }
+
+    if(initlisten(&sd.socket) == -1) {
         fprintf(stderr, "%s: failed to initialize listening socket.\n",
                 PROGNAME);
         exit(EXIT_FAILURE);
     }
 
-    clients = d_set_new(0);
-    if(clients == NULL) {
+    sd.clients = d_set_new(0);
+    if(sd.clients == NULL) {
         fprintf(stderr, "%s: unable to allocate client set.\n", PROGNAME);
         exit(EXIT_FAILURE);
     }
 
-    evsk_new(&evsk);
+    evsk_new(&sd.evsk);
     nframed = 0;
 
     while(1) {
         FD_ZERO(&readfds);
-        FD_SET(servsock, &readfds);
-        nfds = servsock;
-        d_set_resetiteration(clients);
-        while(key = d_set_nextkey(clients), key != D_SET_INVALIDKEY) {
-            d_set_fetch(clients, key, (void **)&cli);
+        FD_SET(sd.socket, &readfds);
+        nfds = sd.socket;
+        d_set_resetiteration(sd.clients);
+        while(key = d_set_nextkey(sd.clients), key != D_SET_INVALIDKEY) {
+            d_set_fetch(sd.clients, key, (void **)&cli);
             if(cli->socket > nfds) nfds = cli->socket;
             FD_SET(cli->socket, &readfds);
         }
@@ -109,46 +118,52 @@ int main(void)
             d_memory_copy(&readfds, &readfdbak, sizeof(readfdbak));
         }
 
-        if(FD_ISSET(servsock, &readfds)) {
-            clisock = accept(servsock, NULL, NULL);
+        if(FD_ISSET(sd.socket, &readfds)) {
+            clisock = accept(sd.socket, NULL, NULL);
             if(clisock == -1) {
                 fprintf(stderr, "%s: accept: %s\n", PROGNAME, strerror(errno));
             } else if(handshake(clisock) == 0) {
                 cli = d_memory_new(sizeof(client_t));
-                cli->handle = d_set_getunusedkey(clients);
+                /* note: cli->handle changes once the user logs in */
+                cli->handle = d_set_getunusedkey(sd.clients);
                 cli->socket = clisock;
                 cli->state = 0;
-                status = d_set_add(clients, cli->handle, (void *)cli);
+                status = d_set_add(sd.clients, cli->handle, (void *)cli);
                 if(status != success)
                     fprintf(stderr, "%s: d_set_add failed\n", PROGNAME);
             }
         }
 
-        d_set_resetiteration(clients);
-        while(key = d_set_nextkey(clients), key != D_SET_INVALIDKEY) {
-            d_set_fetch(clients, key, (void **)&cli);
+        nloggedin = 0;
+        d_set_resetiteration(sd.clients);
+        while(key = d_set_nextkey(sd.clients), key != D_SET_INVALIDKEY) {
+            d_set_fetch(sd.clients, key, (void **)&cli);
             if(FD_ISSET(cli->socket, &readfds)) {
-                i = handleclient(cli, &evsk);
+                i = handleclient(cli, &sd.evsk);
                 if(i == -1) {
                     close(cli->socket);
-                    d_set_remove(clients, key);
-                } else if(i == 1) {
+                    d_set_remove(sd.clients, key);
+                } else if(cli->state > 0)
+                    nloggedin++;
+
+                if(i == 1) {
                     nframed++;
                 }
             }
         }
 
-        if(nframed == d_set_nelements(clients)) {
-            sendevents(clients, &evsk);
+        if(nframed == nloggedin) {
+            sendevents(sd.clients, &sd.evsk);
             nframed = 0;
         }
     }
 
-    evsk_delete(&evsk);
-    d_set_delete(clients);
+    evsk_delete(&sd.evsk);
+    d_set_delete(sd.clients);
 
     exit(EXIT_SUCCESS);
 }
+
 
 void sendevents(d_set_t *clients, eventstack_t *evsk)
 {
@@ -161,7 +176,7 @@ void sendevents(d_set_t *clients, eventstack_t *evsk)
         d_set_resetiteration(clients);
         while(key = d_set_nextkey(clients), key != D_SET_INVALIDKEY) {
             d_set_fetch(clients, key, (void **)&cli);
-            if(cli->handle != ev.subject) {
+            if(cli->handle != ev.subject && cli->state == 3) {
                 p.type = PACK_EVENT;
                 p.body.event = ev;
                 writepack(cli->socket, p);
@@ -173,12 +188,15 @@ void sendevents(d_set_t *clients, eventstack_t *evsk)
     d_set_resetiteration(clients);
     while(key = d_set_nextkey(clients), key != D_SET_INVALIDKEY) {
         d_set_fetch(clients, key, (void **)&cli);
+        if(cli->state != 3)
+            continue;
         p.type = PACK_FRAME;
         writepack(cli->socket, p);
         cli->state = 2;
     }
     return;
 }
+
 
 int handshake(int clisock)
 {
@@ -199,6 +217,7 @@ int handshake(int clisock)
     return 0;
 }
 
+
 int initlisten(int *sock)
 {
     struct sockaddr_in addr;
@@ -218,6 +237,35 @@ int initlisten(int *sock)
     listen(*sock, 5);
     return 0;
 }
+
+
+bool loadservdata(serverdata_t *sd)
+{
+    object_t *o;
+    bool status;
+
+    /* load login db */
+    /* load object db */
+    sd->objs = d_set_new(0);
+    if(sd->objs == NULL) return failure;
+    o = d_memory_new(sizeof(object_t));
+    if(o == NULL) return failure;
+    status = d_set_add(sd->objs, 0, (void *)o);
+    if(status == failure) return failure;
+    o->sprite = loadsprite(DATADIR "/phibes.spr");
+    o->name = "phibes";
+
+    o = d_memory_new(sizeof(object_t));
+    if(o == NULL) return failure;
+    status = d_set_add(sd->objs, 1, (void *)o);
+    if(status == failure) return failure;
+    o->sprite = loadsprite(DATADIR "/phibes.spr");
+    o->name = "STAN";
+    
+    /* load room db */
+    return success;
+}
+
 
 int handleclient(client_t *cli, eventstack_t *evsk)
 {
@@ -244,16 +292,22 @@ int handleclient(client_t *cli, eventstack_t *evsk)
 
     case 1: /* expect sync */
     case 2: /* events */
-        if(p.type == PACK_EVENT) {
+        switch(p.type) {
+        case PACK_EVENT:
             if(p.body.event.subject != cli->handle) {
                 fprintf(stderr, "Got event from %d [calls itself %d]: %d + ``%s''\n",
                         cli->handle, p.body.event.subject, p.body.event.verb,
                         (p.body.event.auxlen)?p.body.event.auxdata:"");
             }
             evsk_push(evsk, p.body.event);
-        } else if(p.type == PACK_FRAME) {
+            break;
+
+        case PACK_FRAME:
             cli->state = 3;
             return 1; /* return that we're framed */
+
+        case PACK_GETOBJECT:
+            break;
         }
         break;
 

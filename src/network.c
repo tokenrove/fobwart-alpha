@@ -1,7 +1,7 @@
 /* 
  * network.c
  * Created: Wed Jul 18 01:29:32 2001 by tek@wiw.org
- * Revised: Thu Jul 19 16:49:40 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 18:56:39 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -45,9 +45,7 @@ bool initnet(gamedata_t *gd, char *servname, int port);
 void closenet(gamedata_t *gd);
 bool login(gamedata_t *gd, char *uname, char *password);
 void syncevents(gamedata_t *gd);
-
-bool readpack(int socket, packet_t *p);
-bool writepack(int socket, packet_t p);
+bool getobject(gamedata_t *gd, word handle);
 
 bool initnet(gamedata_t *gd, char *servname, int port)
 {
@@ -92,6 +90,7 @@ bool initnet(gamedata_t *gd, char *servname, int port)
     return success;
 }
 
+
 void closenet(gamedata_t *gd)
 {
     close(gd->socket);
@@ -99,25 +98,27 @@ void closenet(gamedata_t *gd)
     return;
 }
 
+
 bool login(gamedata_t *gd, char *uname, char *password)
 {
     packet_t p;
+    bool status;
 
     p.type = PACK_LOGIN;
     p.body.login.name = uname;
     p.body.login.namelen = strlen(uname)+1;
     p.body.login.password = password;
     p.body.login.pwlen = strlen(password)+1;
-    writepack(gd->socket, p);
-    if(readpack(gd->socket, &p) != success)
+    status = writepack(gd->socket, p);
+    status &= readpack(gd->socket, &p);
+    if(status != success || p.type != PACK_AYUP)
         return failure;
-    if(p.type != PACK_AYUP) {
-        d_error_debug(__FUNCTION__": Login failed!\n");
-        return failure;
-    }
     gd->localobj = p.body.handle;
+    status = getobject(gd, p.body.handle);
+    if(status != success) return failure;
     return success;
 }
+
 
 void syncevents(gamedata_t *gd)
 {
@@ -143,184 +144,23 @@ void syncevents(gamedata_t *gd)
     return;
 }
 
-bool readpack(int socket, packet_t *p)
+
+bool getobject(gamedata_t *gd, word handle)
 {
-    int i;
-    word wordbuf;
-    dword dwordbuf;
+    bool status;
+    object_t *o;
 
-    i = read(socket, &p->type, 1);
-    if(i == 0) return failure;
-    if(i == -1) goto error;
-
-    switch(p->type) {
-    case PACK_YEAWHAW:
-    case PACK_IRECKON:
-        i = read(socket, &p->body.handshake, 1);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-        break;
-
-    case PACK_EVENT:
-        i = read(socket, &wordbuf, 2);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-        p->body.event.subject = ntohs(wordbuf);
-
-        i = read(socket, &p->body.event.verb, 1);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-
-        i = read(socket, &dwordbuf, 4);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-        p->body.event.auxlen = ntohl(dwordbuf);
-
-        if(p->body.event.auxlen > 0) {
-            p->body.event.auxdata = d_memory_new(p->body.event.auxlen);
-            if(p->body.event.auxdata == NULL)
-                return failure;
-            i = read(socket, p->body.event.auxdata, p->body.event.auxlen);
-            if(i == -1) goto error;
-            if(i == 0) return failure;
-        } else
-            p->body.event.auxdata = NULL;
-        break;
-
-    case PACK_LOGIN:
-        i = read(socket, &dwordbuf, 4);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-        p->body.login.namelen = ntohl(dwordbuf);
-
-        if(p->body.login.namelen > 0) {
-            p->body.login.name = d_memory_new(p->body.login.namelen);
-            if(p->body.login.name == NULL)
-                return failure;
-            i = read(socket, p->body.login.name, p->body.login.namelen);
-            if(i == -1) goto error;
-            if(i == 0) return failure;
-        } else
-            p->body.login.name = NULL;
-
-        i = read(socket, &dwordbuf, 4);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-        p->body.login.pwlen = ntohl(dwordbuf);
-
-        if(p->body.login.pwlen > 0) {
-            p->body.login.password = d_memory_new(p->body.login.pwlen);
-            if(p->body.login.password == NULL)
-                return failure;
-            i = read(socket, p->body.login.password, p->body.login.pwlen);
-            if(i == -1) goto error;
-            if(i == 0) return failure;
-        } else
-            p->body.login.password = NULL;
-        break;
-
-    case PACK_AYUP:
-        i = read(socket, &wordbuf, 2);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-        p->body.handle = ntohs(wordbuf);
-        break;
-
-    case PACK_FRAME:
-        break;
-
-    default:
-        d_error_debug(__FUNCTION__": default. (%d)\n", p->type);
-        goto error;
-    }
+    o = d_memory_new(sizeof(object_t));
+    if(o == NULL) return failure;
+    status = d_set_add(gd->objs, handle, (void *)o);
+    if(status == failure) return failure;
+    o->sprite = loadsprite(DATADIR "/phibes.spr");
+    o->name = "phibes";
+    status = d_manager_addsprite(o->sprite, &o->sphandle, 0);
+    if(status == failure)
+        return failure;
 
     return success;
-error:
-    d_error_debug(__FUNCTION__": %s\n", strerror(errno));
-    return failure;    
-}
-
-bool writepack(int socket, packet_t p)
-{
-    int i;
-    word wordbuf;
-    dword dwordbuf;
-
-    i = write(socket, &p.type, 1);
-    if(i == -1) goto error;
-
-    switch(p.type) {
-    case PACK_YEAWHAW:
-    case PACK_IRECKON:
-        i = write(socket, &p.body.handshake, 1);
-        if(i == -1) goto error;
-        if(i == 0) d_error_debug(__FUNCTION__": blank write\n");
-        break;
-
-    case PACK_EVENT:
-        wordbuf = htons(p.body.event.subject);
-        i = write(socket, &wordbuf, 2);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-
-        i = write(socket, &p.body.event.verb, 1);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-
-        dwordbuf = htonl(p.body.event.auxlen);
-        i = write(socket, &dwordbuf, 4);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-
-        if(p.body.event.auxlen > 0) {
-            i = write(socket, p.body.event.auxdata, p.body.event.auxlen);
-            if(i == -1) goto error;
-            if(i == 0) return failure;
-        }
-        break;
-
-    case PACK_LOGIN:
-        dwordbuf = htonl(p.body.login.namelen);
-        i = write(socket, &dwordbuf, 4);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-
-        if(p.body.login.namelen > 0) {
-            i = write(socket, p.body.login.name, p.body.login.namelen);
-            if(i == -1) goto error;
-            if(i == 0) return failure;
-        }
-
-        dwordbuf = htonl(p.body.login.pwlen);
-        i = write(socket, &dwordbuf, 4);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-
-        if(p.body.login.pwlen > 0) {
-            i = write(socket, p.body.login.password, p.body.login.pwlen);
-            if(i == -1) goto error;
-            if(i == 0) return failure;
-        }
-        break;
-
-    case PACK_AYUP:
-        wordbuf = htons(p.body.handle);
-        i = write(socket, &wordbuf, 2);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-        break;
-
-    case PACK_FRAME:
-        break;
-
-    default:
-        goto error;
-    }
-
-    return success;
-error:
-    d_error_debug(__FUNCTION__": %s\n", strerror(errno));
-    return failure;    
 }
 
 /* EOF network.c */

@@ -1,7 +1,7 @@
 /* 
  * fobnet.h
  * Created: Wed Jul 18 03:53:16 2001 by tek@wiw.org
- * Revised: Thu Jul 19 16:15:24 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 17:50:18 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -12,7 +12,8 @@
 #define FOBNET_H
 
 enum { PACK_YEAWHAW = 0, PACK_IRECKON, PACK_AYUP,
-       PACK_LOGIN, PACK_SYNC, PACK_EVENT, PACK_FRAME };
+       PACK_LOGIN, PACK_SYNC, PACK_EVENT, PACK_FRAME,
+       PACK_GETOBJECT, PACK_GETROOM };
 
 typedef struct packet_s {
     byte type;
