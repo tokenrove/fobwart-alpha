@@ -1,7 +1,7 @@
 /* 
  * fobserv.c
  * Created: Wed Jul 18 03:15:09 2001 by tek@wiw.org
- * Revised: Thu Jul 19 22:16:45 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 22:45:07 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -164,6 +164,8 @@ void mainloop(serverdata_t *sd)
 
         /* sync frames */
         if(nframed == nloggedin) {
+            processevents(sd);
+            updatephysics(&sd->ws);
             sendevents(sd);
             nframed = 0;
         }
