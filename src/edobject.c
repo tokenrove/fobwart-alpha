@@ -1,11 +1,6 @@
 /* 
- * fobobjectdb.c
- * Created: Fri Jul 20 01:20:10 2001 by tek@wiw.org
- * Revised: Fri Jul 20 04:10:27 2001 by tek@wiw.org
+ * edobject.c ($Id$)
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
- * This program comes with ABSOLUTELY NO WARRANTY.
- * $Id$
- * 
  */
 
 #include <dentata/types.h>
@@ -38,9 +33,14 @@
 #include <lua.h>
 
 #include "fobwart.h"
-#include "fobserv.h"
+#include "fobdb.h"
 
 #define PROGNAME "fobobjectdb"
+
+extern void objencode(object_t *obj, DBT *data);
+extern void objdecode(object_t *obj, DBT *data);
+extern int bt_handle_cmp(DB *dbp, const DBT *a_, const DBT *b_);
+
 
 int main(int argc, char **argv)
 {
@@ -97,12 +97,10 @@ int main(int argc, char **argv)
                 } else if(comspec == 10) {
                     object.onground = (strcmp(argv[i], "false"))?true:false;
                 } else if(comspec == 11) {
-                    object.facing = (strcmp(argv[i], "left"))?left:right;
-                } else if(comspec == 12) {
                     object.hp = atoi(argv[i]);
-                } else if(comspec == 13) {
+                } else if(comspec == 12) {
                     object.maxhp = atoi(argv[i]);
-                } else if(comspec == 14) {
+                } else if(comspec == 13) {
                     object.spname = argv[i];
                 }
             } else if(command == CHANGE) {
@@ -158,7 +156,7 @@ int main(int argc, char **argv)
     case HELP:
         printf("commands: help\n"
                "          create\n"
-               "          add <handle> <name> <location> <x> <y> <ax> <ay> <vx> <vy> <onground> <facing> <hp> <maxhp> <spname>\n"
+               "          add <handle> <name> <location> <x> <y> <ax> <ay> <vx> <vy> <onground> <hp> <maxhp> <spname>\n"
                "          remove <name>\n"
                "          view <name>\n"
                "          change <name> <field> <value>\n");
@@ -193,8 +191,6 @@ int main(int argc, char **argv)
             object.vy = atoi(value);
         } else if(strcmp(field, "onground") == 0) {
             object.onground = (strcmp(argv[i], "false"))?true:false;
-        } else if(strcmp(field, "facing") == 0) {
-            object.onground = (strcmp(argv[i], "left"))?left:right;
         } else if(strcmp(field, "hp") == 0) {
             object.hp = atoi(value);
         } else if(strcmp(field, "maxhp") == 0) {
@@ -238,10 +234,9 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
         objdecode(&object, &data);
-        printf("%d -> name => %s, location => %d,\n pos => (%d, %d),\n accel => (%d, %d),\n velocity => (%d, %d),\n onground => %s,\n facing => %s,\n hp => (%d/%d)\n spname => %s\n", *((objhandle_t *)key.data), object.name, object.location, object.x,
+        printf("%d -> name => %s, location => %d,\n pos => (%d, %d),\n accel => (%d, %d),\n velocity => (%d, %d),\n onground => %s,\n hp => (%d/%d)\n spname => %s\n", *((objhandle_t *)key.data), object.name, object.location, object.x,
                object.y, object.ax, object.ay, object.vx, object.vy,
                (object.onground == false) ? "false":"true",
-               (object.facing == left) ? "left":"right",
                object.hp, object.maxhp, object.spname);
         break;
     }
@@ -250,4 +245,4 @@ int main(int argc, char **argv)
     exit(EXIT_SUCCESS);
 }
 
-/* EOF fobobjectdb.c */
+/* EOF edobject.c */

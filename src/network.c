@@ -1,12 +1,10 @@
 /* 
- * network.c
- * Created: Wed Jul 18 01:29:32 2001 by tek@wiw.org
- * Revised: Fri Jul 20 04:02:08 2001 by tek@wiw.org
+ * network.c ($Id$)
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
- * This program comes with ABSOLUTELY NO WARRANTY.
- * $Id$
- * 
+ *
+ * Low-level and common networking routines.
  */
+
 
 #include <dentata/types.h>
 #include <dentata/image.h>
@@ -24,7 +22,15 @@
 #include <dentata/set.h>
 #include <dentata/color.h>
 #include <dentata/memory.h>
-#include <dentata/pcx.h>
+#include <dentata/random.h>
+#include <dentata/util.h>
+
+#include <lua.h>
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #include <sys/types.h>
 #include <limits.h>
@@ -36,13 +42,6 @@
 #include <errno.h>
 #include <netinet/in.h>
 
-#include <lua.h>
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-
 #include <netdb.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -50,26 +49,40 @@
 #include <netinet/in.h>
 
 #include "fobwart.h"
-#include "fobclient.h"
+#include "fobnet.h"
+
+#include "net.h"
 
 
-bool initnet(gamedata_t *gd, char *servname, int port);
-void closenet(gamedata_t *gd);
-bool login(gamedata_t *gd, char *uname, char *password);
-void syncevents(gamedata_t *gd);
-bool getobject(gamedata_t *gd, word handle);
-bool getroom(gamedata_t *gd, word handle);
+bool net_syncevents(nethandle_t *nh, eventstack_t *evsk);
+void net_close(nethandle_t *nh_);
+bool net_login(nethandle_t *nh, char *uname, char *password,
+               objhandle_t *localobj);
+bool net_newclient(nethandle_t **nh_, char *servname, int port);
+bool net_newserver(nethandle_t **nh_, int port);
+
+bool net_readpack(nethandle_t *nh_, packet_t *p);
+bool net_writepack(nethandle_t *nh_, packet_t p);
 
 
-bool initnet(gamedata_t *gd, char *servname, int port)
+bool net_newclient(nethandle_t **nh_, char *servname, int port)
 {
     struct hostent *hostent;
     struct sockaddr_in sockaddr;
     packet_t p;
     bool status;
+    nh_t *nh;
 
-    gd->socket = socket(AF_INET, SOCK_STREAM, 0);
-    if(gd->socket == -1) {
+    nh = d_memory_new(sizeof(nh_t));
+    if(nh == NULL) {
+        *nh_ = NULL;
+        return failure;
+    }
+
+    *nh_ = nh;
+
+    nh->socket = socket(AF_INET, SOCK_STREAM, 0);
+    if(nh->socket == -1) {
         d_error_debug(__FUNCTION__": %s\n", strerror(errno));
         return failure;
     }
@@ -84,20 +97,19 @@ bool initnet(gamedata_t *gd, char *servname, int port)
     memcpy(&sockaddr.sin_addr, hostent->h_addr_list[0], hostent->h_length);
     sockaddr.sin_port = htons(port);
 
-    if(connect(gd->socket, (const struct sockaddr *)&sockaddr,
+    if(connect(nh->socket, (const struct sockaddr *)&sockaddr,
                sizeof(sockaddr)) == -1) {
         d_error_debug(__FUNCTION__": %s\n", strerror(errno));
         return failure;
     }
 
     /* Handshake */
-    status = readpack(gd->socket, &p);
+    status = net_readpack(*nh_, &p);
     if(status == failure || p.type != PACK_YEAWHAW)
         return failure;
-    d_error_debug("PACK_YEAWHAW: %d\n", p.body.handshake);
     p.type = PACK_IRECKON;
     p.body.handshake = 42;
-    status = writepack(gd->socket, p);
+    status = net_writepack(*nh_, p);
     if(status == failure)
         return failure;
 
@@ -105,146 +117,488 @@ bool initnet(gamedata_t *gd, char *servname, int port)
 }
 
 
-void closenet(gamedata_t *gd)
+bool net_newserver(nethandle_t **nh_, int port)
 {
-    close(gd->socket);
-    gd->socket = -1;
-    return;
+    struct sockaddr_in addr;
+    nh_t *nh;
+
+    nh = d_memory_new(sizeof(nh_t));
+    if(nh == NULL) {
+        *nh_ = NULL;
+        return failure;
+    }
+
+    nh->socket = socket(AF_INET, SOCK_STREAM, 0);
+    if(nh->socket == -1)
+        return failure;
+
+    d_memory_set(&addr, 0, sizeof(struct sockaddr_in));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    addr.sin_port = htons(port);
+
+    if(bind(nh->socket, (struct sockaddr *)&addr,
+            sizeof(struct sockaddr_in)) == -1)
+        return failure;
+
+    listen(nh->socket, 5);
+    *nh_ = nh;
+
+    return success;
 }
 
 
-bool login(gamedata_t *gd, char *uname, char *password)
+bool net_login(nethandle_t *nh, char *uname, char *password,
+               objhandle_t *localobj)
 {
     packet_t p;
     bool status;
 
     p.type = PACK_LOGIN;
-    p.body.login.name = (byte *)uname;
-    p.body.login.namelen = strlen(uname)+1;
-    p.body.login.password = (byte *)password;
-    p.body.login.pwlen = strlen(password)+1;
-    status = writepack(gd->socket, p);
-    status &= readpack(gd->socket, &p);
+    status = string_fromasciiz(&p.body.login.name, uname);
+    status &= string_fromasciiz(&p.body.login.password, password);
+    status &= net_writepack(nh, p);
+    string_delete(&p.body.login.name);
+    string_delete(&p.body.login.password);
+
+    status &= net_readpack(nh, &p);
     if(status != success || p.type != PACK_AYUP)
         return failure;
-    gd->localobj = p.body.handle;
-    status = getobject(gd, p.body.handle);
-    if(status != success) return failure;
+    if(localobj != NULL)
+        *localobj = p.body.handle;
     return success;
 }
 
 
-void syncevents(gamedata_t *gd)
+bool net_syncevents(nethandle_t *nh, eventstack_t *evsk)
 {
-    int i;
+    bool status;
     packet_t p;
 
-    for(i = 0; i < gd->evsk.top; i++) {
-        p.type = PACK_EVENT;
-        p.body.event = gd->evsk.events[i];
-        writepack(gd->socket, p);
-    }
+    p.type = PACK_EVENT;
+    while(evsk_pop(evsk, &p.body.event))
+        net_writepack(nh, p);
+
     p.type = PACK_FRAME;
-    i = writepack(gd->socket, p);
-    if(i == -1)
+    status = net_writepack(nh, p);
+    if(status == failure) {
         d_error_debug(__FUNCTION__": write frame failed.\n");
-    while(i = readpack(gd->socket, &p), i != -1 && p.type != PACK_FRAME) {
+        return failure;
+    }
+    while(status = net_readpack(nh, &p), status != failure &&
+                                         p.type != PACK_FRAME) {
         if(p.type != PACK_EVENT)
             d_error_debug(__FUNCTION__": read event failed.\n");
-        evsk_push(&gd->evsk, p.body.event);
+        evsk_push(evsk, p.body.event);
     }
-    if(i == -1)
+    if(status == failure) {
         d_error_debug(__FUNCTION__": read frame failed.\n");
+        return failure;
+    }
+    return success;
+}
+
+
+void net_close(nethandle_t *nh_)
+{
+    nh_t *nh = nh_;
+
+    close(nh->socket);
+    nh->socket = -1;
+    d_memory_delete(nh);
     return;
 }
 
 
-bool getobject(gamedata_t *gd, word handle)
+#define READBYTE(d) { i = read(nh->socket, &(d), 1); \
+                      if(i == -1) goto error; \
+                      if(i == 0) return failure; }
+
+#define READWORD(d, t) { i = read(nh->socket, &(t), 2); \
+                         if(i == -1) goto error; \
+                         if(i == 0) return failure; \
+                         (d) = ntohs((t)); }
+
+#define READDWORD(d, t) { i = read(nh->socket, &(t), 4); \
+                          if(i == -1) goto error; \
+                          if(i == 0) return failure; \
+                          (d) = ntohl((t)); }
+
+#define WRITEBYTE(d) { i = write(nh->socket, &(d), 1); \
+                       if(i == -1) goto error; \
+                       if(i == 0) return failure; }
+
+#define WRITEWORD(d, t) { (t) = htons((d)); \
+                          i = write(nh->socket, &(t), 2); \
+                          if(i == -1) goto error; \
+                          if(i == 0) return failure; }
+
+
+#define WRITEDWORD(d, t) { (t) = htonl((d)); \
+                           i = write(nh->socket, &(t), 4); \
+                           if(i == -1) goto error; \
+                           if(i == 0) return failure; }
+
+
+
+bool net_readpack(nethandle_t *nh_, packet_t *p)
 {
-    bool status;
-    object_t *o;
-    packet_t p;
-    char *s;
+    int i;
+    byte bytebuf;
+    word wordbuf;
+    dword dwordbuf;
+    string_t *name, *password;
+    dword statelen;
+    nh_t *nh = nh_;
 
-    d_error_debug("Added %d\n", handle);
-    p.type = PACK_GETOBJECT;
-    p.body.handle = handle;
-    status = writepack(gd->socket, p);
-    if(status == failure) return failure;
-    status = readpack(gd->socket, &p);
-    if(status == failure || p.type != PACK_OBJECT) return failure;
+    i = read(nh->socket, &p->type, 1);
+    if(i == 0) return failure;
+    if(i == -1) goto error;
 
-    o = d_memory_new(sizeof(object_t));
-    if(o == NULL) return failure;
-    status = d_set_add(gd->ws.objs, handle, (void *)o);
-    if(status == failure) return failure;
-    d_memory_copy(o, &p.body.object, sizeof(p.body.object));
-    d_error_debug("Object %d uses sprite %s\n", handle, o->spname);
-    s = d_memory_new(strlen(DATADIR)+strlen(o->spname)+6);
-    sprintf(s, "%s/%s.spr", DATADIR, o->spname);
-    o->sprite = loadsprite(s);
-    d_memory_delete(s);
-    if(o->sprite == NULL) return failure;
-    status = d_manager_addsprite(o->sprite, &o->sphandle, 0);
-    if(status == failure)
-        return failure;
+    switch(p->type) {
+    case PACK_YEAWHAW:
+    case PACK_IRECKON:
+        READBYTE(p->body.handshake);
+        break;
 
-    return success;
-}
+    case PACK_EVENT:
+        READWORD(p->body.event.subject, wordbuf);
+        READBYTE(p->body.event.verb);
+        READDWORD(p->body.event.auxlen, dwordbuf);
+        if(p->body.event.auxlen > 0) {
+            p->body.event.auxdata = d_memory_new(p->body.event.auxlen);
+            if(p->body.event.auxdata == NULL)
+                return failure;
+            i = read(nh->socket, p->body.event.auxdata, p->body.event.auxlen);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        } else
+            p->body.event.auxdata = NULL;
+        break;
 
+    case PACK_LOGIN:
+        name = &p->body.login.name;
+        READDWORD(name->len, dwordbuf);
+        if(name->len > 0) {
+            name->data = d_memory_new(name->len);
+            if(name->data == NULL)
+                return failure;
+            i = read(nh->socket, name->data, name->len);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        } else
+            name->data = NULL;
 
-bool getroom(gamedata_t *gd, word handle)
-{
-    bool status;
-    room_t *room;
-    packet_t p;
-    d_image_t *im;
-    char *s;
-    dword key;
-    object_t *o;
+        password = &p->body.login.password;
+        READDWORD(password->len, dwordbuf);
+        if(password->len > 0) {
+            password->data = d_memory_new(password->len);
+            if(password->data == NULL)
+                return failure;
+            i = read(nh->socket, password->data, password->len);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        } else
+            password->data = NULL;
+        break;
 
-    d_error_debug("Added room %d\n", handle);
-    p.type = PACK_GETROOM;
-    p.body.handle = handle;
-    status = writepack(gd->socket, p);
-    if(status == failure) return failure;
-    status = readpack(gd->socket, &p);
-    if(status == failure || p.type != PACK_ROOM) return failure;
+    case PACK_AYUP:
+    case PACK_GETOBJECT:
+    case PACK_GETROOM:
+        READWORD(p->body.handle, wordbuf);
+        break;
 
-    room = d_memory_new(sizeof(room_t));
-    if(room == NULL) return failure;
-    status = d_set_add(gd->ws.rooms, handle, (void *)room);
-    if(status == failure) return failure;
-    d_memory_copy(room, &p.body.room, sizeof(p.body.room));
+    case PACK_FRAME:
+        break;
 
-    d_error_debug("Room %d uses map %s\n", handle, room->mapname);
-    s = d_memory_new(strlen(DATADIR)+strlen(room->mapname)+6);
-    sprintf(s, "%s/%s.map", DATADIR, room->mapname);
-    room->map = loadtmap(s);
-    d_memory_delete(s);
-    if(room->map == NULL) return failure;
+    case PACK_OBJECT:
+        READDWORD(dwordbuf, dwordbuf);
+        if(dwordbuf > 0) {
+            p->body.object.name = d_memory_new(dwordbuf);
+            if(p->body.object.name == NULL)
+                return failure;
+            i = read(nh->socket, p->body.object.name, dwordbuf);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        } else
+            p->body.object.name = NULL;
 
-    s = d_memory_new(strlen(DATADIR)+strlen(room->mapname)+6);
-    sprintf(s, "%s/%s.pcx", DATADIR, room->bgname);
-    room->bg = d_pcx_load(s);
-    d_memory_delete(s);
-    if(room->bg == NULL) return failure;
+        READWORD(p->body.object.handle, wordbuf);
+        READWORD(p->body.object.location, wordbuf);
 
-    d_manager_wipelayers();
-    d_manager_wipesprites();
-    d_set_resetiteration(gd->ws.objs);
-    while(key = d_set_nextkey(gd->ws.objs), key != D_SET_INVALIDKEY) {
-        d_set_fetch(gd->ws.objs, key, (void **)&o);
-        if(o->location == room->handle)
-            d_manager_addsprite(o->sprite, &o->sphandle, 0);
+        /* physics */
+        READWORD(p->body.object.x, wordbuf);
+        READWORD(p->body.object.y, wordbuf);
+        READWORD(p->body.object.ax, wordbuf);
+        READWORD(p->body.object.ay, wordbuf);
+        READWORD(p->body.object.vx, wordbuf);
+        READWORD(p->body.object.vy, wordbuf);
+
+        READBYTE(bytebuf);
+        p->body.object.onground = (bytebuf&1) ? true : false;
+
+        /* statistics */
+        READWORD(p->body.object.hp, wordbuf);
+        READWORD(p->body.object.maxhp, wordbuf);
+
+        /* graphics */
+        READDWORD(dwordbuf, dwordbuf);
+        if(dwordbuf > 0) {
+            p->body.object.spname = d_memory_new(dwordbuf);
+            if(p->body.object.spname == NULL)
+                return failure;
+            i = read(nh->socket, p->body.object.spname, dwordbuf);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        } else
+            p->body.object.spname = NULL;
+        p->body.object.sprite = NULL;
+
+        /* scripts */
+        READDWORD(statelen, dwordbuf);
+        if(statelen > 0) {
+            p->body.object.statebuf = d_memory_new(statelen);
+            if(p->body.object.statebuf == NULL) return failure;
+
+            i = read(nh->socket, p->body.object.statebuf, statelen);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        }
+        break;
+
+    case PACK_ROOM:
+        READDWORD(dwordbuf, dwordbuf);
+        if(dwordbuf > 0) {
+            p->body.room.name = d_memory_new(dwordbuf);
+            if(p->body.room.name == NULL)
+                return failure;
+            i = read(nh->socket, p->body.room.name, dwordbuf);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        } else
+            p->body.room.name = NULL;
+
+        READWORD(p->body.room.handle, wordbuf);
+
+        /* physics */
+        READWORD(p->body.room.gravity, wordbuf);
+        READBYTE(bytebuf);
+        p->body.room.islit = (bytebuf&1) ? true:false;
+
+        /* tilemaps */
+        READDWORD(dwordbuf, dwordbuf);
+        if(dwordbuf > 0) {
+            p->body.room.mapname = d_memory_new(dwordbuf);
+            if(p->body.room.mapname == NULL)
+                return failure;
+            i = read(nh->socket, p->body.room.mapname, dwordbuf);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        } else
+            p->body.room.mapname = NULL;
+        p->body.room.map = NULL;
+
+        READDWORD(dwordbuf, dwordbuf);
+        if(dwordbuf > 0) {
+            p->body.room.bgname = d_memory_new(dwordbuf);
+            if(p->body.room.bgname == NULL)
+                return failure;
+            i = read(nh->socket, p->body.room.bgname, dwordbuf);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        } else
+            p->body.room.bgname = NULL;
+        p->body.room.bg = NULL;
+
+        /* contents */
+        p->body.room.contents = NULL;
+        READDWORD(dwordbuf, dwordbuf);
+        if(dwordbuf > 0) {
+            p->body.room.contents = d_set_new(0);
+
+            while(dwordbuf-- > 0) {
+                READWORD(wordbuf, wordbuf);
+                d_set_add(p->body.room.contents, wordbuf, NULL);
+            }
+        }
+
+        /* scripts */
+        break;
+
+    default:
+        d_error_debug(__FUNCTION__": default. (%d)\n", p->type);
+        goto error;
     }
-    status = d_manager_addimagelayer(room->bg, &room->bghandle, -1);
-    if(status == failure) return failure;
-
-    status = d_manager_addtilemaplayer(room->map, &room->tmhandle, 0);
-    if(status == failure) return failure;
 
     return success;
+error:
+    d_error_debug(__FUNCTION__": %s\n", strerror(errno));
+    return failure;    
 }
+
+
+bool net_writepack(nethandle_t *nh_, packet_t p)
+{
+    int i;
+    byte bytebuf, *statebuf;
+    word wordbuf;
+    dword dwordbuf, statelen, key;
+    nh_t *nh = nh_;
+    d_iterator_t it;
+
+    i = write(nh->socket, &p.type, 1);
+    if(i == -1) goto error;
+
+    switch(p.type) {
+    case PACK_YEAWHAW:
+    case PACK_IRECKON:
+        WRITEBYTE(p.body.handshake);
+        break;
+
+    case PACK_EVENT:
+        WRITEWORD(p.body.event.subject, wordbuf);
+        WRITEBYTE(p.body.event.verb);
+        WRITEDWORD(p.body.event.auxlen, dwordbuf);
+        if(p.body.event.auxlen > 0) {
+            i = write(nh->socket, p.body.event.auxdata, p.body.event.auxlen);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        }
+        break;
+
+    case PACK_LOGIN:
+        WRITEDWORD(p.body.login.name.len, dwordbuf);
+        if(p.body.login.name.len > 0) {
+            i = write(nh->socket, p.body.login.name.data, p.body.login.name.len);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        }
+
+        WRITEDWORD(p.body.login.password.len, dwordbuf);
+        if(p.body.login.password.len > 0) {
+            i = write(nh->socket, p.body.login.password.data,
+                      p.body.login.password.len);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        }
+        break;
+
+    case PACK_AYUP:
+    case PACK_GETOBJECT:
+    case PACK_GETROOM:
+        WRITEWORD(p.body.handle, wordbuf);
+        break;
+
+    case PACK_FRAME:
+        break;
+
+    case PACK_OBJECT:
+        WRITEDWORD(strlen(p.body.object.name)+1, dwordbuf);
+        if(strlen(p.body.object.name) > 0) {
+            i = write(nh->socket, p.body.object.name,
+                      strlen(p.body.object.name)+1);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        }
+
+        WRITEWORD(p.body.object.handle, wordbuf);
+        WRITEWORD(p.body.object.location, wordbuf);
+
+        /* physics */
+
+        WRITEWORD(p.body.object.x, wordbuf);
+        WRITEWORD(p.body.object.y, wordbuf);
+        WRITEWORD(p.body.object.ax, wordbuf);
+        WRITEWORD(p.body.object.ay, wordbuf);
+        WRITEWORD(p.body.object.vx, wordbuf);
+        WRITEWORD(p.body.object.vy, wordbuf);
+
+        bytebuf = 0;
+        bytebuf |= (p.body.object.onground == true) ? 1:0;
+        WRITEBYTE(bytebuf);
+
+        /* statistics */
+        WRITEWORD(p.body.object.hp, wordbuf);
+        WRITEWORD(p.body.object.maxhp, wordbuf);
+
+        /* graphics */
+        WRITEDWORD(strlen(p.body.object.spname)+1, dwordbuf);
+        if(strlen(p.body.object.spname) > 0) {
+            i = write(nh->socket, p.body.object.spname,
+                      strlen(p.body.object.spname)+1);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        }
+
+        /* scripts */
+        freezestate(p.body.object.luastate, &statebuf, &statelen);
+        WRITEDWORD(statelen, dwordbuf);
+        if(statelen > 0) {
+            i = write(nh->socket, statebuf, statelen);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+            d_memory_delete(statebuf);
+        }
+        statebuf = NULL;
+
+        break;
+
+    case PACK_ROOM:
+        WRITEDWORD(strlen(p.body.room.name)+1, dwordbuf);
+        if(strlen(p.body.room.name) > 0) {
+            i = write(nh->socket, p.body.room.name,
+                      strlen(p.body.room.name)+1);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        }
+
+        WRITEWORD(p.body.room.handle, wordbuf);
+
+        /* physics */
+        WRITEWORD(p.body.room.gravity, wordbuf);
+        bytebuf = 0;
+        bytebuf |= (p.body.room.islit == true) ? 1:0;
+        WRITEBYTE(bytebuf);
+
+        /* tilemaps */
+        WRITEDWORD(strlen(p.body.room.mapname)+1, dwordbuf);
+        if(strlen(p.body.room.mapname) > 0) {
+            i = write(nh->socket, p.body.room.mapname,
+                      strlen(p.body.room.mapname)+1);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        }
+
+        WRITEDWORD(strlen(p.body.room.bgname)+1, dwordbuf);
+        if(strlen(p.body.room.bgname) > 0) {
+            i = write(nh->socket, p.body.room.bgname,
+                      strlen(p.body.room.bgname)+1);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        }
+
+        /* contents */
+        if(d_set_nelements(p.body.room.contents) > 0) {
+            WRITEDWORD(d_set_nelements(p.body.room.contents), dwordbuf);
+            d_iterator_reset(&it);
+            while(key = d_set_nextkey(&it, p.body.room.contents),
+                  key != D_SET_INVALIDKEY)
+                WRITEWORD(key, wordbuf);
+        } else
+            WRITEDWORD(0, dwordbuf);
+        
+        /* scripts */
+        break;
+
+    default:
+        goto error;
+    }
+
+    return success;
+error:
+    d_error_debug(__FUNCTION__": %s\n", strerror(errno));
+    return failure;    
+}
+
 
 /* EOF network.c */

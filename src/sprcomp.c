@@ -18,15 +18,16 @@ void bomb(char *s, ...);
 
 int main(int argc, char **argv)
 {
-    FILE *infp, *outfp, *testfp;
+    FILE *infp, *outfp;
     char buffer[BUFLEN], *p;
-    int lineno, mode, i, nframes, nanims, framelag;
+    int lineno, mode, i, j, nframes, nanims, framelag;
     int curanim;
     d_image_t *im;
     enum { pcx = 0, tga = 1 } format;
 
     outfp = NULL; nframes = framelag = nanims = -1;
     lineno = mode = curanim = i = 0;
+    im = NULL; format = pcx;
 
     if(argc != 2) {
         printf("Usage:\nsprcomp <sprite description file>\n");
@@ -182,11 +183,11 @@ int main(int argc, char **argv)
             fputc(im->desc.bpp, outfp);
             fputc(im->desc.alpha, outfp);
 
-            i = im->desc.w*im->desc.h*(im->desc.bpp/8);
-            fwrite(im->data, 1, i, outfp);
+            j = im->desc.w*im->desc.h*(im->desc.bpp/8);
+            fwrite(im->data, 1, j, outfp);
             if(im->desc.alpha > 0 && im->desc.bpp > 8) {
-                i = (im->desc.w*im->desc.h*im->desc.alpha+7)/8;
-                fwrite(im->alpha, 1, i, outfp);
+                j = (im->desc.w*im->desc.h*im->desc.alpha+7)/8;
+                fwrite(im->alpha, 1, j, outfp);
             }
 
             i++;

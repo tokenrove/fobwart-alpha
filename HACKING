@@ -1,0 +1,133 @@
+
+CONTENTS
+--------
+
+GENERAL
+CODING GUIDELINES
+SOURCE STRUCTURE
+TODO
+SCRIPTING
+PROTOCOL
+
+
+GENERAL
+-------
+
+The general design here is very client-heavy, for a few reasons. We
+wanted to minimize the amount of network activity while maintaining
+synchronization. We also wanted the clients to have some predictive
+ability to combat network latency. The limitations, which were
+acceptable in this case, were that the clients would have to process
+events deterministically, so state has to be very carefully tracked
+and synchronized.
+
+
+CODING GUIDELINES
+-----------------
+
+The indentation style is basically 4-space K&R. Please use spaces
+instead of tabs.
+
+Where possible, use the applicable dentata functions instead of
+standard library functions, except in cases where the rest of the
+routine uses standard library features which are not present in
+dentata.
+
+
+SOURCE STRUCTURE
+----------------
+
+Currently, the code for the server, the client, and some of the
+utilities is distributed in one group, so as to make the most
+efficient use of common portions of the code.
+
+Common modules:
+ src/data.c	-- Common file format and data structure support.
+	Covers loading of sprites, tilemaps, scripts, and palettes.
+	Also covers initialization and destruction of worldstate_ts.
+ src/db.c	-- Database interface routines.
+ src/gamecore.c	-- Shared physics and event processing.
+ src/lua.c	-- Common Lua interface routines and helper functions.
+ src/network.c	-- Low-level and common networking routines.
+ src/util.c	-- Various helper routines and data structures.
+
+
+TODO
+----
+
+Make-or-break:
+ - room db
+ - room transitions
+ - tile scripting (collide and normal)
+ - bring back messagebuf
+
+Important:
+ - modularize decor/windowing code, so that dialogs can be more easily
+ created
+ - develop tools for profiling network usage
+ - look at pros and cons of merging seperate object lua states into
+ one
+ - implement death
+
+Bells-and-whistles:
+ - megaman teleport routine
+ - megaman death routine
+ - sprite segmentation
+
+
+SCRIPTING
+---------
+
+Scripting is done in Lua. There are scripts for each object, as well
+as a default script with stub functions called ``defobj.luc''. Before
+an object's script is loaded, the default object script is loaded, so
+that the object's script need not implement verbs it doesn't handle.
+
+Verbs are passed a limited form of the object structure, which is a
+userdata in lua, as their first argument. Some verbs have additional
+arguments (a string for talk, an action number for act).
+
+Verbs:
+________________________________________________________________________
+Name		| Value	| Description
+________________|_______|_______________________________________________
+VERB_NOP	| 0	| No operation (dummy verb)
+VERB_TALK	| 1	| Object is speaking
+VERB_RIGHT	| 2	| Movement verb
+VERB_LEFT	| 3	| Movement verb
+VERB_UP		| 4	| Movement verb
+VERB_DOWN	| 5	| Movement verb
+VERB_ACT	| 6	| Object-specific action
+VERB_AUTO	| 7	| Automatic code (sent by server every frame)
+________________|_______|_______________________________________________
+
+
+
+PROTOCOL
+--------
+
+Packet format:
+________________________________________________________________________
+Offset	| Length| Description
+________|_______|_______________________________________________________
+0	| 1	| Packet type (byte)
+1	| x	| Body (see packet types)
+________|_______|_______________________________________________________
+
+
+Packet types:
+________________________________________________________________________
+Name		| Value	| Use
+________________|_______|_______________________________________________
+PACK_YEAHHAW	| 0     | Sent by server during handshake
+PACK_IRECKON	| 1	| Sent by client to acknowledge PACK_YEAHHAW
+PACK_AYUP	| 2	| Packet generally used to acknowledge a request
+PACK_LOGIN	| 3	| Sent by client to request login
+PACK_SYNC	| 4	| Reserved
+PACK_EVENT	| 5	| Packet contains an object event
+PACK_FRAME	| 6	| Indicates wait for/completion of event framing
+PACK_GETOBJECT	| 7	| Request for object
+PACK_GETROOM	| 8	| Request for room
+PACK_OBJECT	| 9	| Packet contains an object
+PACK_ROOM	| 10	| Packet contains a room
+________________|_______|_______________________________________________

@@ -1,0 +1,16 @@
+#
+# Makefile.server ($Id$)
+# Julian Squires <tek@wiw.org> / 2001
+#
+
+SERVOBJS=servmain.o servnet.o servlua.o network.o data.o servevnt.o lua.o \
+         gamecore.o db.o util.o
+SERVDATA=$(COMMONDATA)
+SERVHEADERS=fobwart.h fobserv.h fobdb.h fobnet.h
+
+$(SERVOBJS): $(SERVHEADERS)
+
+$(SERVPROG): $(SERVOBJS) $(SERVDATA)
+	$(CC) $(CFLAGS) -o $@ $(SERVOBJS) $(LDFLAGS)
+
+# EOF Makefile.server

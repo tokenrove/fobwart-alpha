@@ -9,9 +9,12 @@
 DENTATADIR=/usr/local
 
 DEFINES=-DTHIRTYTWOBIT
-CPPFLAGS=$(DEFINES) -I$(DENTATADIR)/include
+CPPFLAGS=$(DEFINES) -I$(DENTATADIR)/include -Iinclude
 CFLAGS=-Wall -pedantic -O6 -g
 LDFLAGS=-L$(DENTATADIR)/lib -ldentata -llua -ldb3
+SPRCOMP=./sprcomp
+TMAPCOMP=./tmapcomp
+LUAC=luac
 
 ###
 # For X11:
@@ -19,41 +22,35 @@ LDFLAGS=-L$(DENTATADIR)/lib -ldentata -llua -ldb3
 # For SVGAlib:
 CLILDFLAGS:=-lvga $(LDFLAGS)
 
-VPATH=src
-CLIOBJS=main.o local.o localdat.o physics.o event.o decor.o audiounix.o \
-        evsk.o network.o netcommon.o datacommon.o
-CLIDATA=
+VPATH=src datagen include
+
+COMMONDATA=data/defobj.luc data/tek.luc data/obs.luc data/carlos.luc \
+           data/tek.spr data/obs.spr data/carlos.spr \
+           data/phibes.spr data/phibes.luc data/room00.map
+
 CLIPROG=fobwart
-CLIHEADERS=fobwart.h fobclient.h
-
-SERVOBJS=fobserv.o netcommon.o datacommon.o evsk.o eventserv.o physics.o
-SERVDATA=
 SERVPROG=fobserv
-SERVHEADERS=fobwart.h fobserv.h
-
-UTILS=sprcomp tmapcomp foblogindb fobobjectdb
+UTILS=sprcomp tmapcomp edlogin edobject
 
 .phony: default
 
-default: $(CLIPROG) $(SERVPROG) $(UTILS)
+all: $(UTILS) $(CLIPROG) $(SERVPROG)
 
-$(CLIPROG): $(CLIOBJS) $(CLIDATA)
-	$(CC) $(CFLAGS) -o $@ $(CLIOBJS) $(CLILDFLAGS)
+default: $(UTILS) $(CLIPROG) $(SERVPROG)
 
-$(SERVPROG): $(SERVOBJS) $(SERVDATA)
-	$(CC) $(CFLAGS) -o $@ $(SERVOBJS) $(LDFLAGS)
+include Makefile.client Makefile.server Makefile.utils
 
-$(UTILS): %: %.o
-	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+data/%.spr: %.spd $(SPRCOMP)
+	$(SPRCOMP) $<
 
-fobobjectdb: fobobjectdb.o datacommon.o
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+data/%.map: %.mpd $(TMAPCOMP)
+	$(TMAPCOMP) $<
 
-$(CLIOBJS): $(CLIHEADERS)
-$(SERVOBJS): $(SERVHEADERS)
+data/%.luc: %.lua
+	$(LUAC) -o $@ $<
 
 clean:
-	rm -f $(CLIOBJS) $(SERVOBJS) *~ src/*~
+	rm -f *.o *~ src/*~ include/*~ datagen/*~
 
 distclean: clean
 	rm -f $(CLIPROG) $(SERVPROG) $(UTILS)

@@ -1,11 +1,8 @@
-/* 
- * evsk.c
- * Created: Tue Jul 17 05:16:17 2001 by tek@wiw.org
- * Revised: Fri Jul 20 04:01:51 2001 by tek@wiw.org
- * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
- * This program comes with ABSOLUTELY NO WARRANTY.
- * $Id$
- * 
+/*
+ * util.c ($Id$)
+ * Julian Squires <tek@wiw.org> / 2001
+ *
+ * Various (possibly transitory) helper routines and data structures.
  */
 
 #include <dentata/types.h>
@@ -25,25 +22,20 @@
 #include <dentata/color.h>
 #include <dentata/memory.h>
 
-#include <sys/types.h>
-#include <limits.h>
-#include <db.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
-#include <netinet/in.h>
-
 #include <lua.h>
 
 #include "fobwart.h"
+
 
 void evsk_new(eventstack_t *evsk);
 void evsk_delete(eventstack_t *evsk);
 void evsk_push(eventstack_t *evsk, event_t ev);
 bool evsk_top(eventstack_t *evsk, event_t *ev);
-bool evsk_pop(eventstack_t *evsk);
+bool evsk_pop(eventstack_t *evsk, event_t *ev);
+
+bool string_fromasciiz(string_t *dst, const char *src);
+void string_delete(string_t *s);
+
 
 void evsk_new(eventstack_t *evsk)
 {
@@ -53,12 +45,14 @@ void evsk_new(eventstack_t *evsk)
     return;
 }
 
+
 void evsk_delete(eventstack_t *evsk)
 {
     if(evsk->events != NULL)
         d_memory_delete(evsk->events);
     return;
 }
+
 
 void evsk_push(eventstack_t *evsk, event_t ev)
 {
@@ -72,6 +66,7 @@ void evsk_push(eventstack_t *evsk, event_t ev)
     return;
 }
 
+
 bool evsk_top(eventstack_t *evsk, event_t *ev)
 {
     if(evsk->top == 0)
@@ -81,12 +76,40 @@ bool evsk_top(eventstack_t *evsk, event_t *ev)
     return true;
 }
 
-bool evsk_pop(eventstack_t *evsk)
+
+bool evsk_pop(eventstack_t *evsk, event_t *ev)
 {
     if(evsk->top == 0)
         return false;
+    if(ev != NULL)
+        *ev = evsk->events[evsk->top-1];
     evsk->top--;
     return true;
 }
 
-/* EOF evsk.c */
+
+bool string_fromasciiz(string_t *dst, const char *src)
+{
+    dst->len = strlen(src)+1;
+    if(dst->len == 1) {
+        dst->len = 0;
+        dst->data = NULL;
+        return success;
+    }
+    dst->data = d_memory_new(dst->len);
+    if(dst->data == NULL) return failure;
+    d_memory_copy(dst->data, src, dst->len);
+    return success;
+}
+
+
+void string_delete(string_t *s)
+{
+    if(s->data != NULL)
+        d_memory_delete(s->data);
+    s->data = NULL;
+    s->len = 0;
+    return;
+}
+
+/* EOF util.c */

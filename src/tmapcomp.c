@@ -25,6 +25,7 @@ int main(int argc, char **argv)
 
     outfp = NULL;
     lineno = i = 0;
+    im = im2 = NULL;
 
     if(argc != 2) {
         printf("Usage:\ntmapcomp <tilemap description file>\n");

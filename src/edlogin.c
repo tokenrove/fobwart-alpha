@@ -38,7 +38,7 @@
 #include <lua.h>
 
 #include "fobwart.h"
-#include "fobserv.h"
+#include "fobdb.h"
 
 #define PROGNAME "foblogindb"
 
@@ -49,7 +49,6 @@ int main(int argc, char **argv)
     DBT key, data;
     loginrec_t loginrec;
     int i, comspec = 0;
-    word wordbuf;
     char *field, *value;
 
     memset(&key, 0, sizeof(key));
@@ -139,10 +138,7 @@ int main(int argc, char **argv)
             dbp->err(dbp, i, "dbp->get");
             exit(EXIT_FAILURE);
         }
-        loginrec.password = data.data;
-        memcpy(&wordbuf, data.data+strlen(loginrec.password)+1,
-               sizeof(wordbuf));
-        loginrec.object = ntohs(wordbuf);
+        unpack(&data, "sw", &loginrec.password, &loginrec.object);
 
         if(strcmp(field, "password") == 0) {
             loginrec.password = value;
@@ -153,12 +149,7 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
 
-        data.size = strlen(loginrec.password)+1+sizeof(loginrec.object);
-        data.data = malloc(data.size);
-        memcpy(data.data, loginrec.password, strlen(loginrec.password)+1);
-        wordbuf = htons(loginrec.object);
-        memcpy(data.data+strlen(loginrec.password)+1, &wordbuf,
-               sizeof(wordbuf));
+        pack(&data, "sw", loginrec.password, loginrec.object);
         i = dbp->put(dbp, NULL, &key, &data, 0);
         if(i != 0) {
             dbp->err(dbp, i, "dbp->put");
@@ -175,12 +166,7 @@ int main(int argc, char **argv)
         break;
 
     case ADD:
-        data.size = strlen(loginrec.password)+1+sizeof(loginrec.object);
-        data.data = malloc(data.size);
-        memcpy(data.data, loginrec.password, strlen(loginrec.password)+1);
-        wordbuf = htons(loginrec.object);
-        memcpy(data.data+strlen(loginrec.password)+1, &wordbuf,
-               sizeof(wordbuf));
+        pack(&data, "sw", loginrec.password, loginrec.object);
         i = dbp->put(dbp, NULL, &key, &data, DB_NOOVERWRITE);
         if(i != 0) {
             dbp->err(dbp, i, "dbp->put");
@@ -194,11 +180,8 @@ int main(int argc, char **argv)
             dbp->err(dbp, i, "dbp->get");
             exit(EXIT_FAILURE);
         }
-        loginrec.password = data.data;
-        memcpy(&wordbuf, data.data+strlen(loginrec.password)+1,
-               sizeof(wordbuf));
-        loginrec.object = ntohs(wordbuf);
-        printf("%s -> %s, %d\n", key.data, loginrec.password,
+        unpack(&data, "sw", &loginrec.password, &loginrec.object);
+        printf("%s -> %s, %d\n", (char *)key.data, loginrec.password,
                loginrec.object);
         break;
     }

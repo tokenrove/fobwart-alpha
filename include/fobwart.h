@@ -1,7 +1,7 @@
 /* 
  * fobwart.h
  * Created: Sat Jul 14 23:23:21 2001 by tek@wiw.org
- * Revised: Fri Jul 20 05:55:01 2001 by tek@wiw.org
+ * Revised: Fri Jul 27 00:23:42 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -13,26 +13,27 @@
 #define LARGEFONTFNAME DATADIR "/slant.fnt"
 #define LIGHTPALFNAME  DATADIR "/light.pal"
 #define DARKPALFNAME   DATADIR "/dark.pal"
+#define DEFOBJSCRIPTFNAME DATADIR "/defobj.luc"
+
+enum { FOBPORT = 6400 };
 
 /* Event verbs */
 enum {
     VERB_NOP = 0, VERB_TALK, VERB_RIGHT, VERB_LEFT, VERB_UP, VERB_DOWN,
-    VERB_ACT, VERB_JUMP, VERB_DIE,
-    VERB_PRE = 254, VERB_AUTO = 255
+    VERB_ACT, VERB_AUTO
 };
 
-/* animation constants */
-enum {
-    ANIMSTANDLEFT = 0, ANIMSTANDRIGHT = 1,
-    ANIMRUNLEFT = 2, ANIMRUNRIGHT = 3,
-    ANIMJUMPLEFT = 4, ANIMJUMPRIGHT = 5
-};
-
-/* Physical constants */
-enum { XVELOCITYMAX = 4, XACCELMAX = 2, JUMPVELOCITY = 7 };
+/* Other game constants */
+enum { OBJSTACKSIZE = 0, LUAOBJECT_TAG = 0 };
 
 typedef word objhandle_t;
 typedef word roomhandle_t;
+
+
+typedef struct string_s {
+    byte *data;
+    dword len;
+} string_t;
 
 
 typedef struct typebuf_s {
@@ -40,12 +41,6 @@ typedef struct typebuf_s {
     word pos, nalloc;
     bool done;
 } typebuf_t;
-
-
-typedef struct messagebuf_s {
-    int curline, nlines, maxlines;
-    byte **lines;
-} messagebuf_t;
 
 
 typedef struct object_s {
@@ -58,7 +53,6 @@ typedef struct object_s {
     int ax, ay;
     int vx, vy;
     bool onground;
-    enum { left = 0, right = 1 } facing;
 
     /* statistics */
     word hp, maxhp;
@@ -69,7 +63,8 @@ typedef struct object_s {
     word sphandle;
 
     /* scripts */
-    d_set_t *scripts;
+    lua_State *luastate;
+    char *statebuf;
 } object_t;
 
 
@@ -118,43 +113,54 @@ typedef struct eventstack_s {
 } eventstack_t;
 
 
-/* Network related */
-enum { PACK_YEAWHAW = 0, PACK_IRECKON, PACK_AYUP,
-       PACK_LOGIN, PACK_SYNC, PACK_EVENT, PACK_FRAME,
-       PACK_GETOBJECT, PACK_GETROOM, PACK_OBJECT, PACK_ROOM };
-
-typedef struct packet_s {
-    byte type;
-    union {
-        byte handshake;
-        word handle;
-        struct {
-            byte *name, *password;
-            int namelen, pwlen;
-        } login;
-        event_t event;
-        object_t object;
-        room_t room;
-    } body;
-} packet_t;
-
-extern bool readpack(int socket, packet_t *p);
-extern bool writepack(int socket, packet_t p);
-
 extern void evsk_new(eventstack_t *evsk);
 extern void evsk_delete(eventstack_t *evsk);
 extern void evsk_push(eventstack_t *evsk, event_t ev);
 extern bool evsk_top(eventstack_t *evsk, event_t *ev);
-extern bool evsk_pop(eventstack_t *evsk);
-extern void messagebuf_add(messagebuf_t *m, byte *msg, dword msglen);
+extern bool evsk_pop(eventstack_t *evsk, event_t *ev);
+
+extern bool string_fromasciiz(string_t *dst, const char *src);
+extern void string_delete(string_t *s);
+
 extern d_sprite_t *loadsprite(char *fname);
 extern d_tilemap_t *loadtmap(char *filename);
-extern void loadpalette(char *filename, d_palette_t *palette);
-extern void updatephysics(worldstate_t *ws);
+extern bool loadpalette(char *filename, d_palette_t *palette);
+extern bool loadscript(lua_State *L, char *filename);
+extern bool deskelobject(object_t *o);
+extern bool deskelroom(room_t *room);
+
 extern bool initworldstate(worldstate_t *ws);
 extern void destroyworldstate(worldstate_t *ws);
-extern void objencode(object_t *obj, DBT *data);
-extern void objdecode(object_t *obj, DBT *data);
-extern int bt_handle_cmp(DB *dbp, const DBT *a_, const DBT *b_);
+
+extern void processevents(eventstack_t *evsk, void *obdat);
+extern void updatephysics(worldstate_t *ws);
+extern bool obtainobject(void *obdat_, objhandle_t handle, object_t **o);
+extern bool obtainroom(void *obdat_, roomhandle_t handle, room_t **room);
+
+extern void setluaworldstate(worldstate_t *ws);
+extern bool freezestate(lua_State *L, byte **data, dword *len);
+extern bool meltstate(lua_State *L, char *data);
+
+extern int setcuranimlua(lua_State *L);
+extern int tostringlua(lua_State *L);
+extern int typelua(lua_State *L);
+extern int setobjectlua(lua_State *L);
+extern int getobjectlua(lua_State *L);
+
+extern void forkaudiothread(d_s3m_t *song);
+
+extern d_image_t *ebar_new(d_image_t *raster);
+extern void ebar_draw(d_image_t *bar, d_color_t primary, int a, int b);
+
+extern void decor_ll_mm2screen(d_image_t *bg);
+extern void decor_ll_mm2window(d_image_t *bg, d_rect_t r);
+
+extern void debouncecontrols(bool *bounce);
+extern void insertchar(typebuf_t *type, int i, bool shift);
+extern int handletextinput(typebuf_t *type, bool *bounce);
+
+extern void setluaenv(lua_State *L);
+extern int talklua(lua_State *L);
+
 
 /* EOF fobwart.h */

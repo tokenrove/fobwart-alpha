@@ -1,0 +1,37 @@
+#
+# Makefile.utils ($Id$)
+# Julian Squires <tek@wiw.org> / 2001
+#
+
+EDLOGINOBJS=edlogin.o db.o
+EDLOGINHEADERS=fobdb.h
+
+$(EDLOGINOBJS): $(EDLOGINHEADERS)
+edlogin: $(EDLOGINOBJS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+
+EDOBJECTOBJS=edobject.o db.o
+EDOBJECTHEADERS=fobwart.h fobdb.h
+
+$(EDOBJECTOBJS): $(EDOBJECTHEADERS)
+edobject: $(EDOBJECTOBJS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+
+SPRCOMPOBJS=sprcomp.o
+SPRCOMPHEADERS=
+
+$(SPRCOMPOBJS): $(SPRCOMPHEADERS)
+sprcomp: $(SPRCOMPOBJS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+
+TMAPCOMPOBJS=tmapcomp.o
+TMAPCOMPHEADERS=
+
+$(TMAPCOMPOBJS): $(TMAPCOMPHEADERS)
+tmapcomp: $(TMAPCOMPOBJS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+# EOF Makefile.utils

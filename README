@@ -5,10 +5,12 @@ fobwart alpha-zero by Daniel Barnes <dbarnes@wordplay.com> and
 Fobwart is a graphical MUD, with a client-side look-and-feel of
 the Megaman series of side-scrolling platform games.
 
-The general design here is very client-heavy, for a few reasons.
-One is that in this case, the servers which were available for
-our use were not as powerful as the clients in question. A second
-was that we wanted to minimize the amount of network activity
-while maintaining synchronization. The limitations, which were
-acceptable in this case, were that the clients would have to
-be trusted, and would have to process events deterministically.
+The file HACKING discusses the internals, adding to fobwart, et
+cetera.
+
+This release requires:
+ - RhombusSoft dentata generation beta (private)
+ - Berkeley db3 version 3.2.x (www.sleepycat.com)
+ - Lua version 4.x (www.lua.org)
+ - for unix-svgalib client: SVGAlib (www.svgalib.org)
+ - for unix-x11 client: X11 development files
