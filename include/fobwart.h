@@ -24,7 +24,7 @@ enum {
 };
 
 /* Other game constants */
-enum { OBJSTACKSIZE = 0, LUAOBJECT_TAG = 0 };
+enum { OBJSTACKSIZE = 0, LUAOBJECT_TAG = 0, PHYSSCALE = 256 };
 
 typedef word objhandle_t;
 typedef word roomhandle_t;

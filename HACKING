@@ -55,24 +55,31 @@ Common modules:
 TODO
 ----
 
-Make-or-break:
- - room db
+Bugs:
+ 1) Hang (probably in server) when a character jumps off screen.
+
+Features:
+
+ Ordered:
+ 3) Add ``really quit?'' dialog if escape is hit.
+ 4) Bring back messagebuf.
+ 6) Add server controls (at the very least, reload when SIGHUP'd)
+ Make-or-break:
  - room transitions
  - tile scripting (collide and normal)
  - bring back messagebuf
-
-Important:
+ Important:
  - modularize decor/windowing code, so that dialogs can be more easily
  created
  - develop tools for profiling network usage
  - look at pros and cons of merging seperate object lua states into
  one
  - implement death
-
-Bells-and-whistles:
+ Bells-and-whistles:
  - megaman teleport routine
  - megaman death routine
  - sprite segmentation
+ - login loop with reconnect, server and port fields
 
 
 SCRIPTING

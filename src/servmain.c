@@ -254,21 +254,6 @@ bool loadservdata(serverdata_t *sd)
     if(status == failure) return failure;
     deskelroom(room);
 
-    /* DUP FOR HACK */
-    room = d_memory_new(sizeof(room_t));
-    if(room == NULL) return failure;
-    room->handle = 1;
-    status = d_set_add(sd->ws.rooms, room->handle, (void *)room);
-    if(status == failure) return failure;
-
-    /* The procedure for loading all rooms that will be here eventually
-     * will either use a database cursor or will load a specified default
-     * room and then traverse all connections from that room */
-    status = roomdb_get(sd->roomdb, room->handle, room);
-    if(status == failure) return failure;
-    deskelroom(room);
-    /* END DUP */
-
     /* load object db */
     sd->ws.objs = d_set_new(0);
     if(sd->ws.objs == NULL) return failure;

@@ -19,6 +19,9 @@ enum {
     EV_LAST = 62
 };
 
+#define LOGINPROMPT ((byte *)"login: ")
+#define PASSPROMPT  ((byte *)"password: ")
+
 
 typedef struct gamedata_s {
     d_image_t *raster;

@@ -6,12 +6,17 @@
 
 TRUE=1;
 FALSE=0;
+PHYSSCALE=1;
 
 function verb_right(o) end
 function verb_left(o) end
 function verb_up(o) end
 function verb_down(o) end
-function verb_auto(o) end
+
+function verb_auto(o)
+    o.ay = 2;
+end
+
 function verb_nop(o) end
 function verb_act(o, n) end
 
@@ -20,23 +25,6 @@ function verb_talk(o, s)
 end
 
 function objectcollide(o, o2)
-   if(o2.x < o.x) then
-      o.ax = 0;
-      o.vx = 0;
-      if(o2.ax > 0) then o.ax = o.ax+1; end
-   elseif (o2.x > o.x) then
-      o.ax = 0;
-      o.vx = 0;
-      if(o2.ax < 0) then o.ax = o.ax-1; end
-   end
-
-   if(o2.y < o.y and o.vy < 0) then
-      o.vy = 0;
-      o.ay = 0;
-   elseif (o2.y > o.y and o.vy > 0) then
-      o.vy = 0;
-      o.ay = 0;
-   end
 end
 
 function physics(o) end

@@ -133,13 +133,16 @@ bool verifylogin(dbhandle_t *db, char *name, char *pw, objhandle_t *object)
     loginrec_t loginrec;
     bool status;
 
+    if(name == NULL || pw == NULL) return failure;
+
     status = logindb_get(db, name, &loginrec);
     if(status != success) return failure;
 
     if(strcmp(loginrec.password, pw) != 0)
         return failure;
 
-    *object = loginrec.object;
+    if(object) *object = loginrec.object;
+
     return success;
 }
 
@@ -354,7 +357,7 @@ bool loadroomdb(dbhandle_t *db_)
         return failure;
     }
 
-    i = db->p->open(db->p, ROOMDB, NULL, DB_BTREE, 0, 0664);
+    i = db->p->open(db->p, ROOMDB, NULL, DB_BTREE, DB_CREATE, 0664);
     if(i != 0) {
         db->p->err(db->p, i, "%s", ROOMDB);
         return failure;

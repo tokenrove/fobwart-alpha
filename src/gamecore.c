@@ -33,18 +33,9 @@ char *verbname[] = { "verb_nop", "verb_talk", "verb_right", "verb_left",
 
 
 void updatephysics(worldstate_t *ws);
-bool checktmcollide(d_image_t *p, d_tilemap_t *tm, d_point_t beg,
-                    d_point_t end, byte *tile, d_point_t offs);
-bool checkcollide(object_t *obj, d_tilemap_t *tm, worldstate_t *ws,
-                  d_point_t pt, byte *ncollides, bool collided[4],
-                  byte tile[4]);
-bool checkobjcollide(worldstate_t *ws, object_t *o, d_point_t pt,
-                     room_t *room, bool runlua);
+bool checkpfcollide(d_sprite_t *sp, d_tilemap_t *tm, int x, int y);
 void updateobjectphysics(worldstate_t *ws, object_t *obj);
 void processevents(eventstack_t *evsk, void *obdat);
-d_point_t nextpoint(int x, int y, int vx, int vy);
-bool blockdirection(byte ncollides, bool collided[4], int vx, int vy,
-                    bool *xdone, bool *ydone);
 
 
 void processevents(eventstack_t *evsk, void *obdat)
@@ -139,237 +130,118 @@ void updatephysics(worldstate_t *ws)
 enum { upleft = 0, upright = 1, downleft = 2, downright = 3 };
 
 /* Physical constants */
-enum { TERMINALVELOCITY = 4 };
+enum { PHYS_HTERMINALV = 4, PHYS_VTERMINALV = 8 };
 
 void updateobjectphysics(worldstate_t *ws, object_t *obj)
 {
-    room_t *curroom;
-    bool status, xdone, ydone, collided[4];
-    d_point_t pt, dst;
-    byte ncollides, tile[4];
+    bool xdone, ydone;
+    d_point_t dst, pt;
+    int xinc, yinc;
+    room_t *room;
 
-    status = d_set_fetch(ws->rooms, obj->location, (void **)&curroom);
-    if(status == failure) {
-        d_error_debug("Unable to obtain room %d!\n", obj->location);
-        return;
-    }
+    d_set_fetch(ws->rooms, obj->location, (void **)&room);
 
-    /* Integrate acceleration into velocity. */
+    /* Provide push algorithm, to avoid frame-differences causing
+       havoc [FIXME] */
+
+
+    /* Integrate acceleration into velocity */
     obj->vx += obj->ax;
-    if(obj->vx > TERMINALVELOCITY) obj->vx = TERMINALVELOCITY;
-    else if(obj->vx < -TERMINALVELOCITY) obj->vx = -TERMINALVELOCITY;
-
     obj->vy += obj->ay;
-    if(obj->vy > TERMINALVELOCITY) obj->vy = TERMINALVELOCITY;
-    else if(obj->vy < -TERMINALVELOCITY) obj->vy = -TERMINALVELOCITY;
 
-    /* Check for collision. */
-    /* If collision occurred, do push algorithm. */
+    /* Apply terminal velocity rules */
+    if(obj->vx > PHYS_HTERMINALV) obj->vx = PHYS_HTERMINALV;
+    else if(obj->vx < -PHYS_HTERMINALV) obj->vx = -PHYS_HTERMINALV;
 
-    xdone = (obj->vx == 0)?true:false;
-    ydone = (obj->vy == 0)?true:false;
+    if(obj->vy > PHYS_VTERMINALV) obj->vy = PHYS_VTERMINALV;
+    else if(obj->vy < -PHYS_VTERMINALV) obj->vy = -PHYS_VTERMINALV;
 
+    /* Integrate velocity into position */
     dst.x = obj->x+obj->vx;
     dst.y = obj->y+obj->vy;
+    pt.x = obj->x; pt.y = obj->y;
+    xdone = ydone = false;
+    xinc = (obj->vx > 0) ? 1:-1;
+    yinc = (obj->vy > 0) ? 1:-1;
 
-    /* While displacement update is not complete, */
     while(!xdone || !ydone) {
-        /* pt = next point in parabola. */
-        pt = nextpoint(obj->x, obj->y, xdone?0:obj->vx, ydone?0:obj->vy);
-        /* Check for collision at pt. */
-        status = checkcollide(obj, curroom->map, ws, pt, &ncollides, collided,
-                              tile);
-        /* If collision occurred, */
-        if(status) {
-            /* determine blocked direction. */
-            status = blockdirection(ncollides, collided, obj->vx, obj->vy,
-                                    &xdone, &ydone);
-        }
+	if(!xdone) {
+	    if(pt.x == dst.x)
+		xdone = true;
+	    else
+		pt.x += xinc;
+	}
+	if(!ydone) {
+	    if(pt.y == dst.y)
+		ydone = true;
+	    else
+		pt.y += yinc;
+	}
 
-        if(status == false) {
-            /* set current position to pt. */
-            obj->x = pt.x;
-            obj->y = pt.y;
-            if(obj->x == dst.x) xdone = true;
-            if(obj->y == dst.y) ydone = true;
-        }
+	/* vertical plane checks */
+	if(pt.y >= room->map->h*room->map->tiledesc.h-1) {
+	    pt.y = room->map->h*room->map->tiledesc.h-1;
+	    ydone = true;
+	    obj->vy = 0;
+	}
+
+	/* Progressive sprite-playfield collision checking */
+	if(checkpfcollide(obj->sprite, room->map, pt.x, pt.y)) {
+	  if(!ydone && checkpfcollide(obj->sprite, room->map,
+				      pt.x-xinc, pt.y)) {
+		pt.y -= yinc;
+		ydone = true;
+	    }
+	    if(!xdone && checkpfcollide(obj->sprite, room->map,
+					pt.x, pt.y-yinc)) {
+		pt.x -= xinc;
+		xdone = true;
+	    }
+	}
     }
+    obj->x = pt.x;
+    obj->y = pt.y;
 
-    /* --- */
+    /* Check for grounding */
+    if(obj->y >= room->map->h*room->map->tiledesc.h-1 ||
+       checkpfcollide(obj->sprite, room->map, pt.x, pt.y+1)) {
+	obj->onground = true;
+    } else
+	obj->onground = false;
 
-    /* Get normal tile */
-    pt.x = obj->x; pt.y = obj->y+1;
-    status = checkcollide(obj, curroom->map, ws, pt, &ncollides, collided,
-                          tile);
-    if(status == true && (collided[downleft] || collided[downright])) {
-        obj->ay = 0;
-        obj->vy = 0;
-        obj->onground = true;
-    } else {
-        obj->ay = curroom->gravity;
-        obj->onground = false;
-    }
-
-    /* Sink horizontal velocity. */
-    if(obj->vx != 0)
-        obj->vx += (obj->vx > 0) ? -1 : 1;
-
-    return;
+    /* Objply friction */
+    if(obj->vx > 0) obj->vx--;
+    if(obj->vx < 0) obj->vx++;
 }
 
 
-d_point_t nextpoint(int x, int y, int vx, int vy)
+bool checkpfcollide(d_sprite_t *sp, d_tilemap_t *tm, int x, int y)
 {
-    d_point_t pt;
+    d_point_t pt, pt2;
+    byte tile;
+    d_image_t *im = d_sprite_getcurframe(sp);
 
-    pt.x = x; pt.y = y;
+    /* Check each tile's worth of the current frame. */
+    for(pt.y = y; pt.y <= y+im->desc.h+tm->tiledesc.h-1;
+	pt.y += tm->tiledesc.h) {
 
-    if(vx > 0) pt.x++;
-    if(vx < 0) pt.x--;
-    if(vy > 0) pt.y++;
-    if(vy < 0) pt.y--;
+	for(pt.x = x; pt.x <= x+im->desc.w+tm->tiledesc.w-1;
+	    pt.x += tm->tiledesc.w) {
 
-    return pt;
-}
-
-
-bool blockdirection(byte ncollides, bool collided[4], int vx, int vy,
-                    bool *xdone, bool *ydone)
-{
-    bool status;
-
-    status = false;
-
-    if(vx < 0 && (collided[upleft] || collided[downleft])) {
-        *xdone = true;
-        status = true;
-    }
-    if(vx > 0 && (collided[upright] || collided[downright])) {
-        *xdone = true;
-        status = true;
-    }
-    if(vy < 0 && (collided[upleft] || collided[upright])) {
-        *ydone = true;
-        status = true;
-    }
-    if(vy > 0 && (collided[downleft] || collided[downright])) {
-        *ydone = true;
-        status = true;
-    }
-    if(ncollides == 4) status = false;
-    return status;
-}
-
-
-bool checkcollide(object_t *obj, d_tilemap_t *tm, worldstate_t *ws,
-                  d_point_t pt, byte *ncollides, bool collided[4],
-                  byte tile[4])
-{
-    d_image_t *p;
-    d_point_t end, beg, half;
-    bool status;
-
-    p = d_sprite_getcurframe(obj->sprite);
-    beg = end = half = pt;
-    half.x += (p->desc.w+tm->tiledesc.w)/2;
-    half.y += (p->desc.h+tm->tiledesc.h)/2;
-    collided[0] = collided[1] = collided[2] = collided[3] = 0;
-    tile[0] = tile[1] = tile[2] = tile[3] = 0;
-    *ncollides = 0;
-
-    end = half;
-    status = checktmcollide(p, tm, beg, end, &tile[upleft], pt);
-    if(status) {
-        (*ncollides)++;
-        collided[upleft] = true;
+	    /* If this tile is in the collidable range, go
+	       on to further checks. */
+	    tile = d_tilemap_gettile(tm, pt);
+	    if(tile&128) {
+		/* check pixel-perfect */
+		pt2.x = x - (pt.x/tm->tiledesc.w)*tm->tiledesc.w;
+		pt2.y = y - (pt.y/tm->tiledesc.h)*tm->tiledesc.h;
+		if(d_image_collide(tm->tiles[tile], im, pt2, pixel))
+		    return true;
+	    }
+	}
     }
 
-    end.x = pt.x+p->desc.w+tm->tiledesc.w;
-    beg.x = half.x+1;
-    status = checktmcollide(p, tm, beg, end, &tile[upright], pt);
-    if(status) {
-        (*ncollides)++;
-        collided[upright] = true;
-    }
-
-    end.x = half.x+1;
-    end.y = pt.y+p->desc.h+tm->tiledesc.h;
-    beg.x = pt.x;
-    beg.y = half.y;
-    status = checktmcollide(p, tm, beg, end, &tile[downleft], pt);
-    if(status) {
-        (*ncollides)++;
-        collided[downleft] = true;
-    }
-
-    end.x = pt.x+p->desc.w+tm->tiledesc.w;
-    beg.x = half.x+1;
-    status = checktmcollide(p, tm, beg, end, &tile[downright], pt);
-    if(status) {
-        (*ncollides)++;
-        collided[downright] = true;
-    }
-
-    return (*ncollides > 0) ? true : false;
-}
-
-
-bool checktmcollide(d_image_t *p, d_tilemap_t *tm, d_point_t beg,
-                    d_point_t end, byte *tile, d_point_t offs)
-{
-    d_point_t pt;
-
-    for(pt.y = beg.y; pt.y < end.y; pt.y+=tm->tiledesc.h) {
-        for(pt.x = beg.x; pt.x < end.x; pt.x+=tm->tiledesc.w) {
-            *tile = d_tilemap_gettile(tm, pt);
-            if(*tile&128) {
-                if(d_tilemap_checktilecollide(tm, p, pt, offs))
-                    return true;
-            }
-        }
-    }
     return false;
-}
-
-
-bool checkobjcollide(worldstate_t *ws, object_t *o, d_point_t pt, room_t *room,
-                     bool runlua)
-{
-    d_iterator_t it;
-    object_t *o2;
-    d_point_t pt2;
-    bool status;
-    int oldtop, ret;
-    dword key;
-
-    status = false;
-
-    d_iterator_reset(&it);
-    while(key = d_set_nextkey(&it, room->contents), key != D_SET_INVALIDKEY) {
-        if(key == o->handle) continue;
-        d_set_fetch(ws->objs, key, (void **)&o2);
-        pt2.x = o2->x-pt.x;
-        pt2.y = o2->y-pt.y;
-        if(d_image_collide(d_sprite_getcurframe(o->sprite),
-                           d_sprite_getcurframe(o2->sprite),
-                           pt2, pixel)) {
-            if(runlua) {
-                oldtop = lua_gettop(o->luastate);
-                lua_getglobal(o->luastate, "objectcollide");
-                lua_pushusertag(o->luastate, o, LUAOBJECT_TAG);
-                lua_pushusertag(o->luastate, o2, LUAOBJECT_TAG);
-                ret = lua_call(o->luastate, 2, 0);
-                if(ret != 0) {
-                    d_error_debug(__FUNCTION__": collide call for object %d "
-                                  "returned %d\n", o->handle, ret);
-                }
-                lua_settop(o->luastate, oldtop);
-            }
-
-            status = true;
-        }
-    }
-    return status;
 }
 
 /* EOF gamecore.c */

@@ -31,11 +31,13 @@
 
 
 void mainloop(gamedata_t *gd);
-void loginloop(gamedata_t *gd, char **uname, char **password);
+bool loginloop(gamedata_t *gd);
+bool loginscreen(gamedata_t *gd, char **uname, char **password);
 void updatedecor(gamedata_t *gd, object_t *player);
 void updatemanager(gamedata_t *gd, object_t *o);
 void cameramanage(gamedata_t *gd, object_t *player);
 void updatetext(gamedata_t *gd);
+void updategreeting(gamedata_t *gd, char *greeting);
 bool loaddata(gamedata_t *gd);
 void destroydata(gamedata_t *gd);
 
@@ -44,7 +46,7 @@ int main(int argc, char **argv)
 {
     gamedata_t gd;
     bool status;
-    char *server = "localhost", *uname = "", *password = "";
+    char *server = "localhost";
 
     if(argc > 1)
         server = argv[1];
@@ -65,6 +67,7 @@ int main(int argc, char **argv)
 
     evsk_new(&gd.evsk);
 
+    /* setup a clean world state */
     status = initworldstate(&gd.ws);
     if(status != success) {
         d_error_fatal("Worldstate init failed.\n");
@@ -75,19 +78,15 @@ int main(int argc, char **argv)
 
     /* load data from server */
     status = loaddata(&gd);
-    if(status == failure) {
+    if(status != success) {
         d_error_fatal("Data load failed.\n");
         return 1;
     }
 
-    loginloop(&gd, &uname, &password);
-
     /* login */
-    status = net_login(gd.nh, uname, password, &gd.localobj);
-    if(status != success) {
-        d_error_fatal("Login as %s failed.\n", uname);
-        return 1;
-    }
+    status = loginloop(&gd);
+    if(status != success)
+        return 0;
 
     /* enter main loop */
     mainloop(&gd);
@@ -104,26 +103,55 @@ int main(int argc, char **argv)
 }
 
 
-void loginloop(gamedata_t *gd, char **uname, char **password)
+/* loginloop
+ * loops around loginscreen and net_login. (alright, not really.
+ * to do that, it would have to re-establish a connection with the
+ * server every time a login fails. maybe add a servername field
+ * in the loginscreen?) */
+bool loginloop(gamedata_t *gd)
 {
-    d_point_t pt;
-    d_rect_t r;
-    int i, onfield;
-    byte *logprompt = (byte *)"login: ", *passprompt = (byte *)"password: ";
-    d_font_t *lshadow;
-    char *field;
-    char *motd[5] = { NULL, "fobwart alpha-zero",
+    char *uname = "", *password = "";
+    bool status;
+
+    status = loginscreen(gd, &uname, &password);
+    if(status != success)
+	return status;
+
+    status = net_login(gd->nh, uname, password, &gd->localobj);
+    return status;
+}
+
+
+/* loginscreen
+ * displays a login screen and prompts the user for their name and
+ * password.
+ * FIXMEs: full of magic numbers. */
+bool loginscreen(gamedata_t *gd, char **uname, char **password)
+{
+    /* Note: This will perhaps in the future be read from the server. */
+    char *motd[4] = { "fobwart alpha-zero",
                       "Copyright 2001 by Daniel Barnes and ",
                       "                  Julian Squires.",
                       NULL, };
+    d_point_t pt;
+    d_rect_t r;
+    int i, onfield;
+    d_font_t *lshadow;
+    char *field;
 
+    /* Setup a palette and a shadow font. */
     d_raster_setpalette(&gd->raster->palette);
     lshadow = d_font_dup(gd->largefont);
     d_font_silhouette(lshadow, d_color_fromrgb(gd->raster, 0, 0, 0), 255);
     onfield = 0;
 
     while(1) {
+	/* handle events */
         d_event_update();
+	/* the user chose to escape. */
+	if(d_event_ispressed(EV_QUIT))
+	    return failure;
+
         i = handletextinput(&gd->type, gd->bounce);
         if(i == 1) {
             if(gd->type.pos > 0) {
@@ -141,55 +169,70 @@ void loginloop(gamedata_t *gd, char **uname, char **password)
             }
         }
 
+	/* display the cute mm2 screen decorations. */
         decor_ll_mm2screen(gd->raster);
 
+	/* display the login prompt with mm2 window decor. */
         r.offset.x = 0; r.w = gd->raster->desc.w;
         r.offset.y = 10; r.h = gd->largefont->desc.h+4;
         decor_ll_mm2window(gd->raster, r);
 
         pt.x = 6;
         pt.y = r.offset.y+4;
-        d_font_printf(gd->raster, lshadow, pt, logprompt);
+        d_font_printf(gd->raster, lshadow, pt, LOGINPROMPT);
         pt.x--; pt.y--;
-        d_font_printf(gd->raster, gd->largefont, pt, logprompt);
-        pt.x += d_font_gettextwidth(gd->largefont, logprompt);
+        d_font_printf(gd->raster, gd->largefont, pt, LOGINPROMPT);
+        pt.x += d_font_gettextwidth(gd->largefont, LOGINPROMPT);
         pt.y += (gd->largefont->desc.h-gd->deffont->desc.h)/2;
 
         if(onfield == 0) {
-            if(gd->type.buf)
+	    /* display the field currently being edited */
+            if(gd->type.buf) {
+		/* clip the field at the cursor position */
+		gd->type.buf[gd->type.pos] = 0;
                 d_font_printf(gd->raster, gd->deffont, pt, (byte *)"%s",
                               gd->type.buf);
+	    }
+	    /* plot the cursor */
             pt.x += gd->type.pos*gd->deffont->desc.w;
             d_font_printf(gd->raster, gd->deffont, pt, (byte *)"\x10");
         } else
             d_font_printf(gd->raster, gd->deffont, pt, (byte *)"%s", *uname);
 
+	/* display the password prompt with mm2-style window. */
         r.offset.x = 0; r.w = gd->raster->desc.w;
         r.offset.y += r.h+10; r.h = gd->largefont->desc.h+4;
         decor_ll_mm2window(gd->raster, r);
 
         pt.x = 6;
         pt.y = r.offset.y+4;
-        d_font_printf(gd->raster, lshadow, pt, passprompt);
+        d_font_printf(gd->raster, lshadow, pt, PASSPROMPT);
         pt.x--; pt.y--;
-        d_font_printf(gd->raster, gd->largefont, pt, passprompt);
-        pt.x += d_font_gettextwidth(gd->largefont, passprompt);
+        d_font_printf(gd->raster, gd->largefont, pt, PASSPROMPT);
+        pt.x += d_font_gettextwidth(gd->largefont, PASSPROMPT);
         pt.y += (gd->largefont->desc.h-gd->deffont->desc.h)/2;
 
+	/* seeing as there are only two fields, this one will always
+	   either be empty or in the process of being edited, so there's
+	   no point drawing the finished password. */
         if(onfield == 1) {
             if(gd->type.buf)
-                d_font_printf(gd->raster, gd->deffont, pt, (byte *)"%s",
-                              gd->type.buf);
+		for(i = 0; i < gd->type.pos; i++) {
+		    if(gd->type.buf[i])
+			d_font_printf(gd->raster, gd->deffont, pt, (byte *)"*");
+		    pt.x += gd->deffont->desc.w;
+		}
+	    pt.x = 6+d_font_gettextwidth(gd->largefont, PASSPROMPT);
             pt.x += gd->type.pos*gd->deffont->desc.w;
             d_font_printf(gd->raster, gd->deffont, pt, (byte *)"\x10");
-        } else
-            d_font_printf(gd->raster, gd->deffont, pt, (byte *)"%s",
-                          *password);
+	}
 
+	/* Display the ``message of the day'', currently just the copyright
+	 * message. */
         pt.x = 5;
         pt.y = gd->raster->desc.h-4*gd->largefont->desc.h;
 
-        for(i = 1; motd[i] != NULL; i++) {
+        for(i = 0; motd[i] != NULL; i++) {
             pt.x++; pt.y++;
             d_font_printf(gd->raster, lshadow, pt, (byte *)"%s", motd[i]);
             pt.x--; pt.y--;
@@ -203,16 +246,14 @@ void loginloop(gamedata_t *gd, char **uname, char **password)
     }
 
     d_font_delete(lshadow);
-    return;
+    return success;
 }
 
 
 void mainloop(gamedata_t *gd)
 {
     d_timehandle_t *th;
-    d_point_t pt;
     object_t *o;
-    char *greeting = "READY";
 
     getobject(gd, gd->localobj);
     if(d_set_fetch(gd->ws.objs, gd->localobj, (void **)&o) != success) {
@@ -229,18 +270,19 @@ void mainloop(gamedata_t *gd)
     gd->status = NULL;
     gd->readycount = 40;
 
+    /* music is disabled atm.
     if(gd->hasaudio && gd->cursong != NULL)
         forkaudiothread(gd->cursong);
+    */
 
     while(1) {
         th = d_time_startcount(gd->fps, false);
         d_event_update();
 
-        /* figure out what the player is pressing */
         /* emergency exit key */
-        if(d_event_ispressed(EV_QUIT) && !gd->bounce[EV_QUIT])
-            if(++gd->quitcount > 1)
-                break;
+        if(d_event_ispressed(EV_QUIT) && !gd->bounce[EV_QUIT]) {
+	    break;
+	}
 
         while(evsk_pop(&gd->evsk, NULL));
         handleinput(gd);
@@ -260,17 +302,8 @@ void mainloop(gamedata_t *gd)
         updatedecor(gd, o);
         /* update text */
         updatetext(gd);
-
-        pt.x = (gd->raster->desc.w-
-                d_font_gettextwidth(gd->largefont,
-                                    (byte *)"%s", greeting))/2;
-        pt.y = (gd->raster->desc.h-gd->largefont->desc.h)/2-20;
-        if(gd->readycount > 0)
-            gd->readycount--;
-
-        if(gd->readycount%10 > 5)
-            d_font_printf(gd->raster, gd->largefont, pt, (byte *)"%s",
-                          greeting);
+	/* update greeting message */
+	updategreeting(gd, "READY");
 
         d_raster_update();
         d_time_endcount(th);
@@ -280,20 +313,47 @@ void mainloop(gamedata_t *gd)
 }
 
 
+/* updategreeting
+ * display a flashing message in the center of the screen, while
+ * the ``readycount'' is still valid. (it's reset on a new game and
+ * on a death) */
+void updategreeting(gamedata_t *gd, char *greeting)
+{
+    d_point_t pt;
+
+    if(gd->readycount > 0) {
+	pt.x = (gd->raster->desc.w-
+		d_font_gettextwidth(gd->largefont,
+				    (byte *)"%s", greeting))/2;
+	pt.y = (gd->raster->desc.h-gd->largefont->desc.h)/2-20;
+	gd->readycount--;
+	
+	if(gd->readycount%8 > 4)
+	    d_font_printf(gd->raster, gd->largefont, pt, (byte *)"%s",
+			  greeting);
+    }
+    return;
+}
+
+
 void updatedecor(gamedata_t *gd, object_t *player)
 {
     d_point_t pt;
     d_color_t c;
 
-    d_memory_copy(&gd->ebar->palette, gd->curpalette,
-                  D_NCLUTITEMS*D_BYTESPERCOLOR);
+    /* Grab the message box color. */
+/*    d_memory_copy(&gd->ebar->palette, gd->curpalette,
+D_NCLUTITEMS*D_BYTESPERCOLOR); */
     c = d_color_fromrgb(gd->ebar, 220, 220, 170);
+
+    /* Draw player's energy bar. */
     ebar_draw(gd->ebar, d_color_fromrgb(gd->ebar, 255, 255, 190),
               player->hp, player->maxhp);
     pt.x = 8;
     pt.y = 8;
     d_image_blit(gd->raster, gd->ebar, pt);
 
+    /* Draw message box. */
     pt.x = 0;
     pt.y = 200;
     for(pt.y = 200; pt.y < gd->raster->desc.h; pt.y++)

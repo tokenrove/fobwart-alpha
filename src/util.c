@@ -88,6 +88,10 @@ bool evsk_pop(eventstack_t *evsk, event_t *ev)
 }
 
 
+/* string_fromasciiz
+ * Converts an ASCII, NUL-terminated C-style string to a string_t. Stores the
+ * result in dst.
+ */
 bool string_fromasciiz(string_t *dst, const char *src)
 {
     dst->len = strlen(src)+1;
@@ -103,6 +107,9 @@ bool string_fromasciiz(string_t *dst, const char *src)
 }
 
 
+/* string_delete
+ * Frees up memory used by a string_t.
+ */
 void string_delete(string_t *s)
 {
     if(s->data != NULL)
