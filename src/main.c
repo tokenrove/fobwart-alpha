@@ -1,7 +1,7 @@
 /* 
  * main.c
  * Created: Sat Jul 14 23:07:02 2001 by tek@wiw.org
- * Revised: Thu Jul 19 22:02:38 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 23:21:13 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -102,8 +102,9 @@ void mainloop(gamedata_t *gd)
 {
     d_timehandle_t *th;
     d_point_t pt;
-    object_t *o;
+    object_t *o, *o2;
     room_t *room;
+    dword key;
 
     d_set_fetch(gd->ws.objs, gd->localobj, (void **)&o);
     d_set_fetch(gd->ws.rooms, o->location, (void **)&room);
@@ -139,6 +140,11 @@ void mainloop(gamedata_t *gd)
 
         /* update manager/graphics */
         d_set_fetch(gd->ws.rooms, o->location, (void **)&room);
+        d_set_resetiteration(gd->ws.objs);
+        while(key = d_set_nextkey(gd->ws.objs), key != D_SET_INVALIDKEY) {
+            d_set_fetch(gd->ws.objs, key, (void **)&o2);
+            d_manager_jumpsprite(o2->sphandle, o2->x, o2->y);
+        }
         cameramanage(gd, o);
         d_manager_draw(gd->raster);
         if(room->islit)
@@ -195,7 +201,6 @@ void cameramanage(gamedata_t *gd, object_t *player)
     int x, y;
     d_rect_t r;
 
-    d_manager_jumpsprite(player->sphandle, player->x, player->y);
     r = d_manager_getvirtualrect();
     x = player->x-gd->raster->desc.w/2;
     y = player->y-gd->raster->desc.h/2;
