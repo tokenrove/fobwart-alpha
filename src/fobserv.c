@@ -1,7 +1,7 @@
 /* 
  * fobserv.c
  * Created: Wed Jul 18 03:15:09 2001 by tek@wiw.org
- * Revised: Thu Jul 19 20:45:43 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 22:16:45 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -48,19 +48,21 @@
 int initlisten(int *sock);
 int handleclient(client_t *cli, serverdata_t *sd);
 int handshake(int clisock);
-void sendevents(d_set_t *clients, eventstack_t *evsk);
 bool loadservdata(serverdata_t *sd);
+void sendevents(serverdata_t *sd);
+void mainloop(serverdata_t *sd);
+
 
 int main(void)
 {
-    int clisock;
-    client_t *cli;
-    int nfds, nframed, nloggedin, i;
-    fd_set readfds, readfdbak;
-    dword key;
-    struct timeval timeout;
-    bool status;
     serverdata_t sd;
+    bool status;
+
+    status = initworldstate(&sd.ws);
+    if(status != success) {
+        fprintf(stderr, "%s: failed to initize world.\n", PROGNAME);
+        exit(EXIT_FAILURE);
+    }
 
     status = loadservdata(&sd);
     if(status != success) {
@@ -81,54 +83,76 @@ int main(void)
     }
 
     evsk_new(&sd.evsk);
+
+    mainloop(&sd);
+
+    evsk_delete(&sd.evsk);
+    d_set_delete(sd.clients);
+    destroyworldstate(&sd.ws);
+
+    exit(EXIT_SUCCESS);
+}
+
+
+void mainloop(serverdata_t *sd)
+{
+    int clisock;
+    client_t *cli;
+    int nfds, nframed, nloggedin, i;
+    fd_set readfds, readfdbak;
+    dword key;
+    struct timeval timeout;
+    bool status;
+
     nframed = 0;
 
     while(1) {
+        /* set readfds */
         FD_ZERO(&readfds);
-        FD_SET(sd.socket, &readfds);
-        nfds = sd.socket;
-        d_set_resetiteration(sd.clients);
-        while(key = d_set_nextkey(sd.clients), key != D_SET_INVALIDKEY) {
-            d_set_fetch(sd.clients, key, (void **)&cli);
+        FD_SET(sd->socket, &readfds);
+        nfds = sd->socket;
+
+        d_set_resetiteration(sd->clients);
+        while(key = d_set_nextkey(sd->clients), key != D_SET_INVALIDKEY) {
+            d_set_fetch(sd->clients, key, (void **)&cli);
             if(cli->socket > nfds) nfds = cli->socket;
             FD_SET(cli->socket, &readfds);
         }
 
-        timeout.tv_sec = 0;
-        timeout.tv_usec = 16000;
-
         d_memory_copy(&readfdbak, &readfds, sizeof(readfds));
-        while(select(nfds+1, &readfds, NULL, NULL, &timeout) == 0) {
+        do {
             timeout.tv_sec = 0;
             timeout.tv_usec = 16000;
             d_memory_copy(&readfds, &readfdbak, sizeof(readfdbak));
-        }
+        } while(select(nfds+1, &readfds, NULL, NULL, &timeout) == 0);
 
-        if(FD_ISSET(sd.socket, &readfds)) {
-            clisock = accept(sd.socket, NULL, NULL);
+        if(FD_ISSET(sd->socket, &readfds)) {
+            /* accept a new connection */
+            clisock = accept(sd->socket, NULL, NULL);
             if(clisock == -1) {
                 fprintf(stderr, "%s: accept: %s\n", PROGNAME, strerror(errno));
             } else if(handshake(clisock) == 0) {
                 cli = d_memory_new(sizeof(client_t));
                 /* note: cli->handle changes once the user logs in */
-                cli->handle = d_set_getunusedkey(sd.clients);
+                cli->handle = d_set_getunusedkey(sd->clients);
                 cli->socket = clisock;
                 cli->state = 0;
-                status = d_set_add(sd.clients, cli->handle, (void *)cli);
+                status = d_set_add(sd->clients, cli->handle, (void *)cli);
                 if(status != success)
                     fprintf(stderr, "%s: d_set_add failed\n", PROGNAME);
             }
         }
 
+        /* handle client requests */
         nloggedin = 0;
-        d_set_resetiteration(sd.clients);
-        while(key = d_set_nextkey(sd.clients), key != D_SET_INVALIDKEY) {
-            d_set_fetch(sd.clients, key, (void **)&cli);
+        d_set_resetiteration(sd->clients);
+        while(key = d_set_nextkey(sd->clients), key != D_SET_INVALIDKEY) {
+            d_set_fetch(sd->clients, key, (void **)&cli);
             if(FD_ISSET(cli->socket, &readfds)) {
-                i = handleclient(cli, &sd);
+                i = handleclient(cli, sd);
                 if(i == -1) {
                     close(cli->socket);
-                    d_set_remove(sd.clients, key);
+                    d_set_remove(sd->clients, key);
                 } else if(cli->state > 0)
                     nloggedin++;
 
@@ -138,42 +162,51 @@ int main(void)
             }
         }
 
+        /* sync frames */
         if(nframed == nloggedin) {
-            sendevents(sd.clients, &sd.evsk);
+            sendevents(sd);
             nframed = 0;
         }
     }
-
-    evsk_delete(&sd.evsk);
-    d_set_delete(sd.clients);
-
-    exit(EXIT_SUCCESS);
+    return;
 }
 
 
-void sendevents(d_set_t *clients, eventstack_t *evsk)
+void sendevents(serverdata_t *sd)
 {
     event_t ev;
     client_t *cli;
     dword key;
     packet_t p;
+    object_t *o;
+    roomhandle_t room;
 
-    while(evsk_top(evsk, &ev)) {
-        d_set_resetiteration(clients);
-        while(key = d_set_nextkey(clients), key != D_SET_INVALIDKEY) {
-            d_set_fetch(clients, key, (void **)&cli);
-            if(cli->handle != ev.subject && cli->state == 3) {
+    while(evsk_top(&sd->evsk, &ev)) {
+        if(d_set_fetch(sd->ws.objs, ev.subject, (void **)&o))
+            room = o->location;
+        else {
+            evsk_pop(&sd->evsk);
+            continue;
+        }
+
+        d_set_resetiteration(sd->clients);
+        while(key = d_set_nextkey(sd->clients), key != D_SET_INVALIDKEY) {
+            d_set_fetch(sd->clients, key, (void **)&cli);
+            d_set_fetch(sd->ws.objs, cli->handle, (void **)&o);
+            if(cli->handle != ev.subject &&
+               cli->state == 3 &&
+               o->location == room) {
                 p.type = PACK_EVENT;
                 p.body.event = ev;
                 writepack(cli->socket, p);
             }
         }
-        evsk_pop(evsk);
+        evsk_pop(&sd->evsk);
     }
 
-    d_set_resetiteration(clients);
-    while(key = d_set_nextkey(clients), key != D_SET_INVALIDKEY) {
-        d_set_fetch(clients, key, (void **)&cli);
+    d_set_resetiteration(sd->clients);
+    while(key = d_set_nextkey(sd->clients), key != D_SET_INVALIDKEY) {
+        d_set_fetch(sd->clients, key, (void **)&cli);
         if(cli->state != 3)
             continue;
         p.type = PACK_FRAME;
@@ -228,21 +261,39 @@ int initlisten(int *sock)
 bool loadservdata(serverdata_t *sd)
 {
     object_t *o;
+    room_t *room;
     bool status;
 
     /* load login db */
+    /* load room db */
+    sd->ws.rooms = d_set_new(0);
+    if(sd->ws.rooms == NULL) return failure;
+
+    room = d_memory_new(sizeof(room_t));
+    if(room == NULL) return failure;
+    room->handle = d_set_getunusedkey(sd->ws.rooms);
+    status = d_set_add(sd->ws.rooms, room->handle, (void *)room);
+    if(status == failure) return failure;
+    room->name = "nowhere";
+    room->islit = true;
+    room->gravity = 2;
+    room->mapname = "rlevel";
+    room->map = loadtmap(DATADIR "/rlevel.map");    
+
     /* load object db */
-    sd->objs = d_set_new(0);
-    if(sd->objs == NULL) return failure;
+    sd->ws.objs = d_set_new(0);
+    if(sd->ws.objs == NULL) return failure;
     o = d_memory_new(sizeof(object_t));
     if(o == NULL) return failure;
-    status = d_set_add(sd->objs, 0, (void *)o);
+    o->handle = d_set_getunusedkey(sd->ws.objs);
+    status = d_set_add(sd->ws.objs, o->handle, (void *)o);
     if(status == failure) return failure;
+    o->spname = "phibes";
     o->sprite = loadsprite(DATADIR "/phibes.spr");
     o->name = "phibes";
     o->ax = o->vx = o->vy = 0;
-/*    o->ay = room->gravity; */
-    o->ay = 2;
+    o->location = room->handle;
+    o->ay = room->gravity;
     o->onground = false;
     o->x = 64;
     o->y = 64;
@@ -251,20 +302,21 @@ bool loadservdata(serverdata_t *sd)
 
     o = d_memory_new(sizeof(object_t));
     if(o == NULL) return failure;
-    status = d_set_add(sd->objs, 1, (void *)o);
+    o->handle = d_set_getunusedkey(sd->ws.objs);
+    status = d_set_add(sd->ws.objs, o->handle, (void *)o);
     if(status == failure) return failure;
+    o->spname = "phibes";
     o->sprite = loadsprite(DATADIR "/phibes.spr");
     o->name = "STAN";
     o->ax = o->vx = o->vy = 0;
-/*    o->ay = room->gravity; */
-    o->ay = 2;
+    o->ay = room->gravity;
+    o->location = room->handle;
     o->onground = false;
     o->x = 64;
     o->y = 64;
     o->maxhp = 412;
     o->hp = 200;
     
-    /* load room db */
     return success;
 }
 
@@ -273,6 +325,7 @@ int handleclient(client_t *cli, serverdata_t *sd)
 {
     packet_t p;
     object_t *o;
+    room_t *room;
     bool status;
 
     if(readpack(cli->socket, &p) == failure) return -1;
@@ -301,7 +354,7 @@ int handleclient(client_t *cli, serverdata_t *sd)
             if(p.body.event.subject != cli->handle) {
                 fprintf(stderr, "Got event from %d [calls itself %d]: %d + ``%s''\n",
                         cli->handle, p.body.event.subject, p.body.event.verb,
-                        (p.body.event.auxlen)?p.body.event.auxdata:"");
+                        (p.body.event.auxlen)?(char *)p.body.event.auxdata:"");
                 return -1;
             }
             evsk_push(&sd->evsk, p.body.event);
@@ -312,11 +365,20 @@ int handleclient(client_t *cli, serverdata_t *sd)
             return 1; /* return that we're framed */
 
         case PACK_GETOBJECT:
-            status = d_set_fetch(sd->objs, p.body.handle, (void **)&o);
+            status = d_set_fetch(sd->ws.objs, p.body.handle, (void **)&o);
             if(status == failure)
                 return -1;
             p.type = PACK_OBJECT;
             p.body.object = *o;
+            writepack(cli->socket, p);
+            break;
+
+        case PACK_GETROOM:
+            status = d_set_fetch(sd->ws.rooms, p.body.handle, (void **)&room);
+            if(status == failure)
+                return -1;
+            p.type = PACK_ROOM;
+            p.body.room = *room;
             writepack(cli->socket, p);
             break;
         }

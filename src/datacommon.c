@@ -1,7 +1,7 @@
 /* 
  * datacommon.c
  * Created: Thu Jul 19 18:35:37 2001 by tek@wiw.org
- * Revised: Thu Jul 19 18:37:52 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 22:00:30 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -32,6 +32,51 @@
 void loadpalette(char *filename, d_palette_t *palette);
 d_tilemap_t *loadtmap(char *filename);
 d_sprite_t *loadsprite(char *filename);
+bool initworldstate(worldstate_t *ws);
+void destroyworldstate(worldstate_t *ws);
+
+
+bool initworldstate(worldstate_t *ws)
+{
+    ws->objs = d_set_new(0);
+    if(ws->objs == NULL) return failure;
+
+    ws->rooms = d_set_new(0);
+    if(ws->rooms == NULL) return failure;
+
+    ws->luastate = lua_open(0);
+    if(ws->luastate == NULL)
+        return failure;
+
+    return success;
+}
+
+
+void destroyworldstate(worldstate_t *ws)
+{
+    object_t *o;
+    room_t *room;
+    dword key;
+
+    d_set_resetiteration(ws->objs);
+    while(key = d_set_nextkey(ws->objs), key != D_SET_INVALIDKEY) {
+        d_set_fetch(ws->objs, key, (void **)&o);
+        d_sprite_delete(o->sprite);
+        o->sprite = NULL;
+    }
+    d_set_delete(ws->objs);
+
+    d_set_resetiteration(ws->rooms);
+    while(key = d_set_nextkey(ws->rooms), key != D_SET_INVALIDKEY) {
+        d_set_fetch(ws->rooms, key, (void **)&room);
+        d_tilemap_delete(room->map);
+        room->map = NULL;
+    }
+    d_set_delete(ws->rooms);
+
+    lua_close(ws->luastate);
+    return;
+}
 
 
 d_sprite_t *loadsprite(char *filename)

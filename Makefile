@@ -26,7 +26,7 @@ CLIDATA=
 CLIPROG=fobwart
 CLIHEADERS=fobwart.h fobclient.h
 
-SERVOBJS=fobserv.o netcommon.o datacommon.o evsk.o
+SERVOBJS=fobserv.o netcommon.o datacommon.o evsk.o eventserv.o physics.o
 SERVDATA=
 SERVPROG=fobserv
 SERVHEADERS=fobwart.h fobserv.h

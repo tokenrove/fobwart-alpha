@@ -1,7 +1,7 @@
 /* 
  * netcommon.c
  * Created: Thu Jul 19 18:01:48 2001 by tek@wiw.org
- * Revised: Thu Jul 19 20:43:27 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 22:13:59 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -150,6 +150,7 @@ bool readpack(int socket, packet_t *p)
             p->body.object.name = NULL;
 
         READWORD(p->body.object.handle, wordbuf);
+        READWORD(p->body.object.location, wordbuf);
 
         /* physics */
 
@@ -169,6 +170,56 @@ bool readpack(int socket, packet_t *p)
         READWORD(p->body.object.maxhp, wordbuf);
 
         /* graphics */
+        READDWORD(dwordbuf, dwordbuf);
+        if(dwordbuf > 0) {
+            p->body.object.spname = d_memory_new(dwordbuf);
+            if(p->body.object.spname == NULL)
+                return failure;
+            i = read(socket, p->body.object.spname, dwordbuf);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        } else
+            p->body.object.spname = NULL;
+        p->body.object.sprite = NULL;
+
+        /* scripts */
+        break;
+
+    case PACK_ROOM:
+        READDWORD(dwordbuf, dwordbuf);
+        if(dwordbuf > 0) {
+            p->body.room.name = d_memory_new(dwordbuf);
+            if(p->body.room.name == NULL)
+                return failure;
+            i = read(socket, p->body.room.name, dwordbuf);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        } else
+            p->body.room.name = NULL;
+
+        READWORD(p->body.room.handle, wordbuf);
+
+        /* physics */
+        READWORD(p->body.room.gravity, wordbuf);
+        READBYTE(bytebuf);
+        p->body.room.islit = (bytebuf&1) ? true:false;
+
+        /* tilemaps */
+        READDWORD(dwordbuf, dwordbuf);
+        if(dwordbuf > 0) {
+            p->body.room.mapname = d_memory_new(dwordbuf);
+            if(p->body.room.mapname == NULL)
+                return failure;
+            i = read(socket, p->body.room.mapname, dwordbuf);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        } else
+            p->body.room.mapname = NULL;
+        p->body.room.map = NULL;
+
+        /* contents */
+        p->body.room.objs = NULL;
+
         /* scripts */
         break;
 
@@ -245,6 +296,7 @@ bool writepack(int socket, packet_t p)
         }
 
         WRITEWORD(p.body.object.handle, wordbuf);
+        WRITEWORD(p.body.object.location, wordbuf);
 
         /* physics */
 
@@ -265,6 +317,43 @@ bool writepack(int socket, packet_t p)
         WRITEWORD(p.body.object.maxhp, wordbuf);
 
         /* graphics */
+        WRITEDWORD(strlen(p.body.object.spname)+1, dwordbuf);
+        if(strlen(p.body.object.spname) > 0) {
+            i = write(socket, p.body.object.spname,
+                      strlen(p.body.object.spname)+1);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        }
+
+        /* scripts */
+        break;
+
+    case PACK_ROOM:
+        WRITEDWORD(strlen(p.body.room.name)+1, dwordbuf);
+        if(strlen(p.body.room.name) > 0) {
+            i = write(socket, p.body.room.name,
+                      strlen(p.body.room.name)+1);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        }
+
+        WRITEWORD(p.body.room.handle, wordbuf);
+
+        /* physics */
+        WRITEWORD(p.body.room.gravity, wordbuf);
+        bytebuf = 0;
+        bytebuf |= (p.body.room.islit == true) ? 1:0;
+        WRITEBYTE(bytebuf);
+
+        /* tilemaps */
+        WRITEDWORD(strlen(p.body.room.mapname)+1, dwordbuf);
+        if(strlen(p.body.room.mapname) > 0) {
+            i = write(socket, p.body.room.mapname,
+                      strlen(p.body.room.mapname)+1);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        }
+
         /* scripts */
         break;
 

@@ -1,7 +1,7 @@
 /* 
  * network.c
  * Created: Wed Jul 18 01:29:32 2001 by tek@wiw.org
- * Revised: Thu Jul 19 20:40:29 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 21:36:25 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -24,6 +24,7 @@
 #include <dentata/set.h>
 #include <dentata/color.h>
 #include <dentata/memory.h>
+#include <dentata/pcx.h>
 
 #include <lua.h>
 #include <errno.h>
@@ -47,6 +48,7 @@ void closenet(gamedata_t *gd);
 bool login(gamedata_t *gd, char *uname, char *password);
 void syncevents(gamedata_t *gd);
 bool getobject(gamedata_t *gd, word handle);
+bool getroom(gamedata_t *gd, word handle);
 
 
 bool initnet(gamedata_t *gd, char *servname, int port)
@@ -163,12 +165,51 @@ bool getobject(gamedata_t *gd, word handle)
 
     o = d_memory_new(sizeof(object_t));
     if(o == NULL) return failure;
-    status = d_set_add(gd->objs, handle, (void *)o);
+    status = d_set_add(gd->ws.objs, handle, (void *)o);
     if(status == failure) return failure;
     d_memory_copy(o, &p.body.object, sizeof(p.body.object));
+    d_error_debug("Object %d uses sprite %s\n", handle, o->spname);
     o->sprite = loadsprite(DATADIR "/phibes.spr");
     if(o->sprite == NULL) return failure;
     status = d_manager_addsprite(o->sprite, &o->sphandle, 0);
+    if(status == failure)
+        return failure;
+
+    return success;
+}
+
+
+bool getroom(gamedata_t *gd, word handle)
+{
+    bool status;
+    room_t *room;
+    packet_t p;
+    d_image_t *im;
+
+    d_error_debug("Added room %d\n", handle);
+    p.type = PACK_GETROOM;
+    p.body.handle = handle;
+    status = writepack(gd->socket, p);
+    if(status == failure) return failure;
+    status = readpack(gd->socket, &p);
+    if(status == failure || p.type != PACK_ROOM) return failure;
+
+    room = d_memory_new(sizeof(room_t));
+    if(room == NULL) return failure;
+    status = d_set_add(gd->ws.rooms, handle, (void *)room);
+    if(status == failure) return failure;
+    d_memory_copy(room, &p.body.room, sizeof(p.body.room));
+
+    d_error_debug("Room %d uses map %s\n", handle, room->mapname);
+    room->map = loadtmap(DATADIR "/rlevel.map");
+
+    /* FIXME note: memory leak here */
+    im = d_pcx_load(DATADIR "/stars.pcx");
+    if(im == NULL)
+        return failure;
+    d_manager_addimagelayer(im, NULL, -1);
+
+    status = d_manager_addtilemaplayer(room->map, &room->tmhandle, 0);
     if(status == failure)
         return failure;
 

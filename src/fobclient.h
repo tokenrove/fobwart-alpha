@@ -1,7 +1,7 @@
 /* 
  * fobclient.h
  * Created: Thu Jul 19 19:18:44 2001 by tek@wiw.org
- * Revised: Thu Jul 19 19:19:57 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 22:21:52 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -18,12 +18,6 @@ enum {
     EV_ENTER = 58, EV_SHIFT = 59, EV_PAGEUP = 60, EV_PAGEDOWN = 61,
     EV_LAST = 62,
 
-    XVELOCITYMAX = 4, XACCELMAX = 2, JUMPVELOCITY = 7,
-
-    ANIMSTANDLEFT = 0, ANIMSTANDRIGHT = 1,
-    ANIMRUNLEFT = 2, ANIMRUNRIGHT = 3,
-    ANIMJUMPLEFT = 4, ANIMJUMPRIGHT = 5,
-
     EBAR_MAXSLIVERS = 24
 };
 
@@ -32,7 +26,8 @@ typedef struct gamedata_s {
     int fps;
     d_font_t *deffont, *largefont;
     bool hasaudio;
-    lua_State *luastate;
+
+    worldstate_t ws;
 
     /* network/game related */
     int socket;
@@ -50,12 +45,9 @@ typedef struct gamedata_s {
     eventstack_t evsk;
 
     /* room data */
-    d_set_t *rooms;
-    word curroom;
     d_palette_t light, dark, *curpalette;
 
     /* object data */
-    d_set_t *objs;
     word localobj;
 
     /* decor data */
@@ -68,9 +60,9 @@ typedef struct gamedata_s {
 
 extern bool initlocal(gamedata_t *gd);
 extern bool loaddata(gamedata_t *gd);
+extern void destroydata(gamedata_t *gd);
 extern void deinitlocal(gamedata_t *gd);
 extern void handleinput(gamedata_t *gd);
-extern void updatephysics(gamedata_t *gd);
 extern void forkaudiothread(gamedata_t *);
 extern void ebar_draw(d_image_t *bar, int nslivers);
 extern void processevents(gamedata_t *gd);
@@ -79,6 +71,7 @@ extern void closenet(gamedata_t *gd);
 extern bool login(gamedata_t *gd, char *uname, char *password);
 extern void syncevents(gamedata_t *gd);
 extern bool getobject(gamedata_t *gd, word handle);
+extern bool getroom(gamedata_t *gd, word handle);
 
 
 /* EOF fobclient.h */

@@ -1,7 +1,7 @@
 /* 
  * fobwart.h
  * Created: Sat Jul 14 23:23:21 2001 by tek@wiw.org
- * Revised: Thu Jul 19 20:40:44 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 22:22:09 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -20,6 +20,16 @@ enum {
     VERB_ACT, VERB_JUMP, VERB_DIE,
     VERB_PRE = 254, VERB_AUTO = 255
 };
+
+/* animation constants */
+enum {
+    ANIMSTANDLEFT = 0, ANIMSTANDRIGHT = 1,
+    ANIMRUNLEFT = 2, ANIMRUNRIGHT = 3,
+    ANIMJUMPLEFT = 4, ANIMJUMPRIGHT = 5
+};
+
+/* Physical constants */
+enum { XVELOCITYMAX = 4, XACCELMAX = 2, JUMPVELOCITY = 7 };
 
 typedef word objhandle_t;
 typedef word roomhandle_t;
@@ -41,6 +51,7 @@ typedef struct messagebuf_s {
 typedef struct object_s {
     char *name;
     objhandle_t handle;
+    roomhandle_t location;
 
     /* physics */
     word x, y;
@@ -71,6 +82,7 @@ typedef struct room_s {
     bool islit;
 
     /* tilemaps */
+    char *mapname;
     d_tilemap_t *map;
     word tmhandle;
 
@@ -87,6 +99,13 @@ typedef struct event_s {
     void *auxdata;
     dword auxlen;
 } event_t;
+
+
+typedef struct worldstate_s {
+    d_set_t *objs;
+    d_set_t *rooms;
+    lua_State *luastate;
+} worldstate_t;
 
 
 typedef struct eventstack_s {
@@ -111,6 +130,7 @@ typedef struct packet_s {
         } login;
         event_t event;
         object_t object;
+        room_t room;
     } body;
 } packet_t;
 
@@ -126,5 +146,8 @@ extern void messagebuf_add(messagebuf_t *m, byte *msg, dword msglen);
 extern d_sprite_t *loadsprite(char *fname);
 extern d_tilemap_t *loadtmap(char *filename);
 extern void loadpalette(char *filename, d_palette_t *palette);
+extern void updatephysics(worldstate_t *ws);
+extern bool initworldstate(worldstate_t *ws);
+extern void destroyworldstate(worldstate_t *ws);
 
 /* EOF fobwart.h */

@@ -1,7 +1,7 @@
 /* 
  * main.c
  * Created: Sat Jul 14 23:07:02 2001 by tek@wiw.org
- * Revised: Thu Jul 19 19:58:02 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 22:02:38 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -59,16 +59,17 @@ int main(int argc, char **argv)
     }
 
     evsk_new(&gd.evsk);
-    gd.luastate = lua_open(0);
-    if(gd.luastate == NULL) {
-        d_error_fatal("Lua init failed.\n");
+
+    status = initworldstate(&gd.ws);
+    if(status != success) {
+        d_error_fatal("Worldstate init failed.\n");
         return 1;
     }
 
     gd.mbuf.nlines = gd.mbuf.curline = 0;
     gd.mbuf.maxlines = 42;
     gd.mbuf.lines = d_memory_new(sizeof(byte *)*gd.mbuf.maxlines);
-
+    
     /* load data from server */
     status = loaddata(&gd);
     if(status == failure) {
@@ -82,16 +83,17 @@ int main(int argc, char **argv)
         d_error_fatal("Login as %s failed.\n", "tek");
         return 1;
     }
-    
+
     /* enter main loop */
     mainloop(&gd);
 
     /* close connection */
     /* deinit local */
-    lua_close(gd.luastate);
     evsk_delete(&gd.evsk);
     deinitlocal(&gd);
     closenet(&gd);
+    destroydata(&gd);
+    destroyworldstate(&gd.ws);
     d_error_dump();
     return 0;
 }
@@ -103,8 +105,8 @@ void mainloop(gamedata_t *gd)
     object_t *o;
     room_t *room;
 
-    d_set_fetch(gd->objs, gd->localobj, (void **)&o);
-    d_set_fetch(gd->rooms, gd->curroom, (void **)&room);
+    d_set_fetch(gd->ws.objs, gd->localobj, (void **)&o);
+    d_set_fetch(gd->ws.rooms, o->location, (void **)&room);
     gd->type.pos = 0;
     gd->type.nalloc = 0;
     gd->type.buf = NULL;
@@ -133,10 +135,10 @@ void mainloop(gamedata_t *gd)
         syncevents(gd);
         /* do physics calculation */
         processevents(gd);
-        updatephysics(gd);
+        updatephysics(&gd->ws);
 
         /* update manager/graphics */
-        d_set_fetch(gd->rooms, gd->curroom, (void **)&room);
+        d_set_fetch(gd->ws.rooms, o->location, (void **)&room);
         cameramanage(gd, o);
         d_manager_draw(gd->raster);
         if(room->islit)

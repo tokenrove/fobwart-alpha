@@ -1,7 +1,7 @@
 /* 
  * foblogindb.c
  * Created: Thu Jul 19 17:25:20 2001 by tek@wiw.org
- * Revised: Thu Jul 19 19:37:36 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 20:50:07 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -27,7 +27,7 @@
 
 #include <sys/types.h>
 #include <limits.h>
-#include <db.h>
+#include <db3.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>

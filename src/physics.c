@@ -1,7 +1,7 @@
 /* 
  * physics.c
  * Created: Sun Jul 15 03:42:53 2001 by tek@wiw.org
- * Revised: Thu Jul 19 19:24:59 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 21:35:20 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -26,29 +26,28 @@
 #include <lua.h>
 
 #include "fobwart.h"
-#include "fobclient.h"
 
 
-void updatephysics(gamedata_t *gd);
+void updatephysics(worldstate_t *ws);
 bool checktmcollide(object_t *obj, d_tilemap_t *tm, d_point_t pt,
                     int vx, int vy);
-void updateobjectphysics(gamedata_t *gd, object_t *obj);
+void updateobjectphysics(worldstate_t *ws, object_t *obj);
 
 
-void updatephysics(gamedata_t *gd)
+void updatephysics(worldstate_t *ws)
 {
     object_t *o;
     dword key;
 
-    d_set_resetiteration(gd->objs);
-    while(key = d_set_nextkey(gd->objs), key != D_SET_INVALIDKEY) {
-        d_set_fetch(gd->objs, key, (void **)&o);
-        updateobjectphysics(gd, o);
+    d_set_resetiteration(ws->objs);
+    while(key = d_set_nextkey(ws->objs), key != D_SET_INVALIDKEY) {
+        d_set_fetch(ws->objs, key, (void **)&o);
+        updateobjectphysics(ws, o);
     }
 }
 
 
-void updateobjectphysics(gamedata_t *gd, object_t *obj)
+void updateobjectphysics(worldstate_t *ws, object_t *obj)
 {
     d_point_t pt;
     room_t *curroom;
@@ -64,7 +63,7 @@ void updateobjectphysics(gamedata_t *gd, object_t *obj)
     pt.x = obj->x;
     pt.y = obj->y;
 
-    d_set_fetch(gd->rooms, gd->curroom, (void **)&curroom);
+    d_set_fetch(ws->rooms, obj->location, (void **)&curroom);
 
     while(pt.y != obj->y+obj->vy) {
         if(checktmcollide(obj, curroom->map, pt, 0, obj->vy))

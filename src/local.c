@@ -1,7 +1,7 @@
 /* 
  * local.c
  * Created: Sat Jul 14 23:30:18 2001 by tek@wiw.org
- * Revised: Thu Jul 19 19:56:28 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 21:21:17 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -268,9 +268,11 @@ end:
 void handlegameinput(gamedata_t *gd)
 {
     room_t *room;
+    object_t *o;
     event_t ev;
 
-    d_set_fetch(gd->rooms, gd->curroom, (void **)&room);
+    d_set_fetch(gd->ws.objs, gd->localobj, (void **)&o);
+    d_set_fetch(gd->ws.rooms, o->location, (void **)&room);
 
     if(d_event_ispressed(EV_RIGHT)) {
         ev.subject = gd->localobj;

@@ -1,7 +1,7 @@
 /* 
  * event.c
  * Created: Sun Jul 15 03:40:42 2001 by tek@wiw.org
- * Revised: Thu Jul 19 21:34:39 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 22:21:29 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -27,16 +27,16 @@
 #include <dentata/util.h>
 
 #include <lua.h>
+#include <stdio.h>
 
 #include "fobwart.h"
-#include "fobclient.h"
+#include "fobserv.h"
 
 
-void processevents(gamedata_t *gd);
-int localsprintf(byte **s, byte *msg, ...);
+void processevents(serverdata_t *sd);
 
 
-void processevents(gamedata_t *gd)
+void processevents(serverdata_t *sd)
 {
     event_t ev;
     object_t *o;
@@ -44,43 +44,21 @@ void processevents(gamedata_t *gd)
     byte *s;
     int slen;
     bool status;
+    int i;
 
-    status = d_set_fetch(gd->ws.objs, gd->localobj, (void **)&o);
-    status = d_set_fetch(gd->ws.rooms, o->location, (void **)&room);
-    if(status != success) {
-        status = getroom(gd, o->location);
+    for(i = 0; i < sd->evsk.top; i++) {
+        ev = sd->evsk.events[i];
+        status = d_set_fetch(sd->ws.objs, ev.subject, (void **)&o);
+        if(status != success) {
+            d_error_debug(__FUNCTION__": failed to fetch object %d.\n",
+                          ev.subject);
+            continue;
+        }
+
+        status = d_set_fetch(sd->ws.rooms, o->location, (void **)&room);
         if(status != success) {
             d_error_debug(__FUNCTION__": failed to fetch current room!\n");
-            return;
-        }
-
-        status = d_set_fetch(gd->ws.rooms, o->location, (void **)&room);
-        if(status != success) {
-            d_error_debug(__FUNCTION__": dwarf invasion room %d.\n",
-                          o->location);
-            return;
-        }
-    }
-
-    while(evsk_top(&gd->evsk, &ev)) {
-        status = d_set_fetch(gd->ws.objs, ev.subject, (void **)&o);
-        if(status != success) {
-            status = getobject(gd, ev.subject);
-
-            if(status != success) {
-                d_error_debug(__FUNCTION__": failed to fetch object %d.\n",
-                              ev.subject);
-                evsk_pop(&gd->evsk);
-                continue;
-            }
-
-            status = d_set_fetch(gd->ws.objs, ev.subject, (void **)&o);
-            if(status != success) {
-                d_error_debug(__FUNCTION__": dwarf invasion object %d.\n",
-                              ev.subject);
-                evsk_pop(&gd->evsk);
-                continue;
-            }
+            continue;
         }
 
         switch(ev.verb) {
@@ -108,8 +86,6 @@ void processevents(gamedata_t *gd)
             break;
 
         case VERB_ACT:
-            gd->slowmo ^= 1;
-            gd->slowcount = 0;
             break;
 
         case VERB_JUMP:
@@ -124,29 +100,13 @@ void processevents(gamedata_t *gd)
             break;
 
         case VERB_TALK:
-            slen = localsprintf(&s, (byte *)"<%s> %s", o->name, ev.auxdata);
-            messagebuf_add(&gd->mbuf, s, slen);
-            d_memory_delete(s);
+            fprintf(stderr, "<%s> %s\n", o->name, ev.auxdata);
             d_memory_delete(ev.auxdata);
             ev.auxdata = NULL;
             break;
         }
-        evsk_pop(&gd->evsk);
     }
     return;
 }
 
-
-int localsprintf(byte **s, byte *msg, ...)
-{
-    int slen;
-    void *args;
-
-    args = &msg+1;
-    slen = d_util_printflen(msg, args)+1;
-    *s = d_memory_new(slen);
-    d_util_sprintf(*s, msg, args);
-    return slen;
-}
-
-/* EOF event.c */
+/* EOF eventserv.c */
