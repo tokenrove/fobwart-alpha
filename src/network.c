@@ -1,7 +1,7 @@
 /* 
  * network.c
  * Created: Wed Jul 18 01:29:32 2001 by tek@wiw.org
- * Revised: Thu Jul 19 19:50:01 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 20:40:29 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -151,14 +151,23 @@ bool getobject(gamedata_t *gd, word handle)
 {
     bool status;
     object_t *o;
+    packet_t p;
+
+    d_error_debug("Added %d\n", handle);
+    p.type = PACK_GETOBJECT;
+    p.body.handle = handle;
+    status = writepack(gd->socket, p);
+    if(status == failure) return failure;
+    status = readpack(gd->socket, &p);
+    if(status == failure || p.type != PACK_OBJECT) return failure;
 
     o = d_memory_new(sizeof(object_t));
     if(o == NULL) return failure;
     status = d_set_add(gd->objs, handle, (void *)o);
     if(status == failure) return failure;
+    d_memory_copy(o, &p.body.object, sizeof(p.body.object));
     o->sprite = loadsprite(DATADIR "/phibes.spr");
-    o->name = "phibes";
-    o->name[0] += handle;
+    if(o->sprite == NULL) return failure;
     status = d_manager_addsprite(o->sprite, &o->sphandle, 0);
     if(status == failure)
         return failure;

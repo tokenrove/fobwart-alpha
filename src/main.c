@@ -1,7 +1,7 @@
 /* 
  * main.c
  * Created: Sat Jul 14 23:07:02 2001 by tek@wiw.org
- * Revised: Thu Jul 19 19:40:11 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 19:58:02 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -105,13 +105,6 @@ void mainloop(gamedata_t *gd)
 
     d_set_fetch(gd->objs, gd->localobj, (void **)&o);
     d_set_fetch(gd->rooms, gd->curroom, (void **)&room);
-    o->ax = o->vx = o->vy = 0;
-    o->ay = room->gravity;
-    o->onground = false;
-    o->x = 64;
-    o->y = 64;
-    o->maxhp = 412;
-    o->hp = 200;
     gd->type.pos = 0;
     gd->type.nalloc = 0;
     gd->type.buf = NULL;

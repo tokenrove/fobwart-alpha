@@ -1,7 +1,7 @@
 /* 
  * fobserv.c
  * Created: Wed Jul 18 03:15:09 2001 by tek@wiw.org
- * Revised: Thu Jul 19 19:22:50 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 20:45:43 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -46,7 +46,7 @@
 #define PROGNAME "fobserv"
 
 int initlisten(int *sock);
-int handleclient(client_t *cli, eventstack_t *evsk);
+int handleclient(client_t *cli, serverdata_t *sd);
 int handshake(int clisock);
 void sendevents(d_set_t *clients, eventstack_t *evsk);
 bool loadservdata(serverdata_t *sd);
@@ -125,7 +125,7 @@ int main(void)
         while(key = d_set_nextkey(sd.clients), key != D_SET_INVALIDKEY) {
             d_set_fetch(sd.clients, key, (void **)&cli);
             if(FD_ISSET(cli->socket, &readfds)) {
-                i = handleclient(cli, &sd.evsk);
+                i = handleclient(cli, &sd);
                 if(i == -1) {
                     close(cli->socket);
                     d_set_remove(sd.clients, key);
@@ -240,6 +240,14 @@ bool loadservdata(serverdata_t *sd)
     if(status == failure) return failure;
     o->sprite = loadsprite(DATADIR "/phibes.spr");
     o->name = "phibes";
+    o->ax = o->vx = o->vy = 0;
+/*    o->ay = room->gravity; */
+    o->ay = 2;
+    o->onground = false;
+    o->x = 64;
+    o->y = 64;
+    o->maxhp = 412;
+    o->hp = 200;
 
     o = d_memory_new(sizeof(object_t));
     if(o == NULL) return failure;
@@ -247,15 +255,25 @@ bool loadservdata(serverdata_t *sd)
     if(status == failure) return failure;
     o->sprite = loadsprite(DATADIR "/phibes.spr");
     o->name = "STAN";
+    o->ax = o->vx = o->vy = 0;
+/*    o->ay = room->gravity; */
+    o->ay = 2;
+    o->onground = false;
+    o->x = 64;
+    o->y = 64;
+    o->maxhp = 412;
+    o->hp = 200;
     
     /* load room db */
     return success;
 }
 
 
-int handleclient(client_t *cli, eventstack_t *evsk)
+int handleclient(client_t *cli, serverdata_t *sd)
 {
     packet_t p;
+    object_t *o;
+    bool status;
 
     if(readpack(cli->socket, &p) == failure) return -1;
 
@@ -284,8 +302,9 @@ int handleclient(client_t *cli, eventstack_t *evsk)
                 fprintf(stderr, "Got event from %d [calls itself %d]: %d + ``%s''\n",
                         cli->handle, p.body.event.subject, p.body.event.verb,
                         (p.body.event.auxlen)?p.body.event.auxdata:"");
+                return -1;
             }
-            evsk_push(evsk, p.body.event);
+            evsk_push(&sd->evsk, p.body.event);
             break;
 
         case PACK_FRAME:
@@ -293,6 +312,12 @@ int handleclient(client_t *cli, eventstack_t *evsk)
             return 1; /* return that we're framed */
 
         case PACK_GETOBJECT:
+            status = d_set_fetch(sd->objs, p.body.handle, (void **)&o);
+            if(status == failure)
+                return -1;
+            p.type = PACK_OBJECT;
+            p.body.object = *o;
+            writepack(cli->socket, p);
             break;
         }
         break;

@@ -1,7 +1,7 @@
 /* 
  * fobwart.h
  * Created: Sat Jul 14 23:23:21 2001 by tek@wiw.org
- * Revised: Thu Jul 19 19:22:21 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 20:40:44 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -53,6 +53,7 @@ typedef struct object_s {
     word hp, maxhp;
 
     /* graphics */
+    char *spname;
     d_sprite_t *sprite;
     word sphandle;
 
@@ -97,7 +98,7 @@ typedef struct eventstack_s {
 /* Network related */
 enum { PACK_YEAWHAW = 0, PACK_IRECKON, PACK_AYUP,
        PACK_LOGIN, PACK_SYNC, PACK_EVENT, PACK_FRAME,
-       PACK_GETOBJECT, PACK_GETROOM };
+       PACK_GETOBJECT, PACK_GETROOM, PACK_OBJECT, PACK_ROOM };
 
 typedef struct packet_s {
     byte type;
@@ -109,6 +110,7 @@ typedef struct packet_s {
             int namelen, pwlen;
         } login;
         event_t event;
+        object_t object;
     } body;
 } packet_t;
 

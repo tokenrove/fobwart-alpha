@@ -1,7 +1,7 @@
 /* 
  * netcommon.c
  * Created: Thu Jul 19 18:01:48 2001 by tek@wiw.org
- * Revised: Thu Jul 19 19:26:23 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 20:43:27 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -42,10 +42,40 @@
 #include "fobwart.h"
 #include "fobclient.h"
 
+#define READBYTE(d) { i = read(socket, &(d), 1); \
+                      if(i == -1) goto error; \
+                      if(i == 0) return failure; }
+
+#define READWORD(d, t) { i = read(socket, &(t), 2); \
+                         if(i == -1) goto error; \
+                         if(i == 0) return failure; \
+                         (d) = ntohs((t)); }
+
+#define READDWORD(d, t) { i = read(socket, &(t), 4); \
+                          if(i == -1) goto error; \
+                          if(i == 0) return failure; \
+                          (d) = ntohl((t)); }
+
+#define WRITEBYTE(d) { i = write(socket, &(d), 1); \
+                       if(i == -1) goto error; \
+                       if(i == 0) return failure; }
+
+#define WRITEWORD(d, t) { (t) = htons((d)); \
+                          i = write(socket, &(t), 2); \
+                          if(i == -1) goto error; \
+                          if(i == 0) return failure; }
+
+
+#define WRITEDWORD(d, t) { (t) = htonl((d)); \
+                           i = write(socket, &(t), 4); \
+                           if(i == -1) goto error; \
+                           if(i == 0) return failure; }
+
 
 bool readpack(int socket, packet_t *p)
 {
     int i;
+    byte bytebuf;
     word wordbuf;
     dword dwordbuf;
 
@@ -56,26 +86,13 @@ bool readpack(int socket, packet_t *p)
     switch(p->type) {
     case PACK_YEAWHAW:
     case PACK_IRECKON:
-        i = read(socket, &p->body.handshake, 1);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
+        READBYTE(p->body.handshake);
         break;
 
     case PACK_EVENT:
-        i = read(socket, &wordbuf, 2);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-        p->body.event.subject = ntohs(wordbuf);
-
-        i = read(socket, &p->body.event.verb, 1);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-
-        i = read(socket, &dwordbuf, 4);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-        p->body.event.auxlen = ntohl(dwordbuf);
-
+        READWORD(p->body.event.subject, wordbuf);
+        READBYTE(p->body.event.verb);
+        READDWORD(p->body.event.auxlen, dwordbuf);
         if(p->body.event.auxlen > 0) {
             p->body.event.auxdata = d_memory_new(p->body.event.auxlen);
             if(p->body.event.auxdata == NULL)
@@ -88,11 +105,7 @@ bool readpack(int socket, packet_t *p)
         break;
 
     case PACK_LOGIN:
-        i = read(socket, &dwordbuf, 4);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-        p->body.login.namelen = ntohl(dwordbuf);
-
+        READDWORD(p->body.login.namelen, dwordbuf);
         if(p->body.login.namelen > 0) {
             p->body.login.name = d_memory_new(p->body.login.namelen);
             if(p->body.login.name == NULL)
@@ -103,11 +116,7 @@ bool readpack(int socket, packet_t *p)
         } else
             p->body.login.name = NULL;
 
-        i = read(socket, &dwordbuf, 4);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-        p->body.login.pwlen = ntohl(dwordbuf);
-
+        READDWORD(p->body.login.pwlen, dwordbuf);
         if(p->body.login.pwlen > 0) {
             p->body.login.password = d_memory_new(p->body.login.pwlen);
             if(p->body.login.password == NULL)
@@ -120,13 +129,47 @@ bool readpack(int socket, packet_t *p)
         break;
 
     case PACK_AYUP:
-        i = read(socket, &wordbuf, 2);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-        p->body.handle = ntohs(wordbuf);
+    case PACK_GETOBJECT:
+    case PACK_GETROOM:
+        READWORD(p->body.handle, wordbuf);
         break;
 
     case PACK_FRAME:
+        break;
+
+    case PACK_OBJECT:
+        READDWORD(dwordbuf, dwordbuf);
+        if(dwordbuf > 0) {
+            p->body.object.name = d_memory_new(dwordbuf);
+            if(p->body.object.name == NULL)
+                return failure;
+            i = read(socket, p->body.object.name, dwordbuf);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        } else
+            p->body.object.name = NULL;
+
+        READWORD(p->body.object.handle, wordbuf);
+
+        /* physics */
+
+        READWORD(p->body.object.x, wordbuf);
+        READWORD(p->body.object.y, wordbuf);
+        READWORD(p->body.object.ax, wordbuf);
+        READWORD(p->body.object.ay, wordbuf);
+        READWORD(p->body.object.vx, wordbuf);
+        READWORD(p->body.object.vy, wordbuf);
+
+        READBYTE(bytebuf);
+        p->body.object.onground = (bytebuf&1) ? true : false;
+        p->body.object.facing = (bytebuf&2) ? left : right;
+
+        /* statistics */
+        READWORD(p->body.object.hp, wordbuf);
+        READWORD(p->body.object.maxhp, wordbuf);
+
+        /* graphics */
+        /* scripts */
         break;
 
     default:
@@ -143,6 +186,7 @@ error:
 bool writepack(int socket, packet_t p)
 {
     int i;
+    byte bytebuf;
     word wordbuf;
     dword dwordbuf;
 
@@ -152,26 +196,13 @@ bool writepack(int socket, packet_t p)
     switch(p.type) {
     case PACK_YEAWHAW:
     case PACK_IRECKON:
-        i = write(socket, &p.body.handshake, 1);
-        if(i == -1) goto error;
-        if(i == 0) d_error_debug(__FUNCTION__": blank write\n");
+        WRITEBYTE(p.body.handshake);
         break;
 
     case PACK_EVENT:
-        wordbuf = htons(p.body.event.subject);
-        i = write(socket, &wordbuf, 2);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-
-        i = write(socket, &p.body.event.verb, 1);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-
-        dwordbuf = htonl(p.body.event.auxlen);
-        i = write(socket, &dwordbuf, 4);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-
+        WRITEWORD(p.body.event.subject, wordbuf);
+        WRITEBYTE(p.body.event.verb);
+        WRITEDWORD(p.body.event.auxlen, dwordbuf);
         if(p.body.event.auxlen > 0) {
             i = write(socket, p.body.event.auxdata, p.body.event.auxlen);
             if(i == -1) goto error;
@@ -180,22 +211,14 @@ bool writepack(int socket, packet_t p)
         break;
 
     case PACK_LOGIN:
-        dwordbuf = htonl(p.body.login.namelen);
-        i = write(socket, &dwordbuf, 4);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-
+        WRITEDWORD(p.body.login.namelen, dwordbuf);
         if(p.body.login.namelen > 0) {
             i = write(socket, p.body.login.name, p.body.login.namelen);
             if(i == -1) goto error;
             if(i == 0) return failure;
         }
 
-        dwordbuf = htonl(p.body.login.pwlen);
-        i = write(socket, &dwordbuf, 4);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
-
+        WRITEDWORD(p.body.login.pwlen, dwordbuf);
         if(p.body.login.pwlen > 0) {
             i = write(socket, p.body.login.password, p.body.login.pwlen);
             if(i == -1) goto error;
@@ -204,13 +227,45 @@ bool writepack(int socket, packet_t p)
         break;
 
     case PACK_AYUP:
-        wordbuf = htons(p.body.handle);
-        i = write(socket, &wordbuf, 2);
-        if(i == -1) goto error;
-        if(i == 0) return failure;
+    case PACK_GETOBJECT:
+    case PACK_GETROOM:
+        WRITEWORD(p.body.handle, wordbuf);
         break;
 
     case PACK_FRAME:
+        break;
+
+    case PACK_OBJECT:
+        WRITEDWORD(strlen(p.body.object.name)+1, dwordbuf);
+        if(strlen(p.body.object.name) > 0) {
+            i = write(socket, p.body.object.name,
+                      strlen(p.body.object.name)+1);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        }
+
+        WRITEWORD(p.body.object.handle, wordbuf);
+
+        /* physics */
+
+        WRITEWORD(p.body.object.x, wordbuf);
+        WRITEWORD(p.body.object.y, wordbuf);
+        WRITEWORD(p.body.object.ax, wordbuf);
+        WRITEWORD(p.body.object.ay, wordbuf);
+        WRITEWORD(p.body.object.vx, wordbuf);
+        WRITEWORD(p.body.object.vy, wordbuf);
+
+        bytebuf = 0;
+        bytebuf |= (p.body.object.onground == true) ? 1:0;
+        bytebuf |= (p.body.object.facing == left) ? 2:0;
+        WRITEBYTE(bytebuf);
+
+        /* statistics */
+        WRITEWORD(p.body.object.hp, wordbuf);
+        WRITEWORD(p.body.object.maxhp, wordbuf);
+
+        /* graphics */
+        /* scripts */
         break;
 
     default:

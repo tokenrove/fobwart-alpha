@@ -1,7 +1,7 @@
 /* 
  * local.c
  * Created: Sat Jul 14 23:30:18 2001 by tek@wiw.org
- * Revised: Thu Jul 19 19:24:11 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 19:56:28 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -261,9 +261,7 @@ void handletextinput(gamedata_t *gd)
             gd->type.buf[gd->type.pos--] = 0;
 
 end:
-    for(i = 0; i < EV_LAST; i++) {
-        gd->bounce[i] = d_event_ispressed(i);
-    }
+    debouncecontrols(gd);
 }
 
 
