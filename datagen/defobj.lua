@@ -4,9 +4,9 @@
 -- Julian Squires <tek@wiw.org> / 2001
 --
 
+-- Constants
 TRUE=1;
 FALSE=0;
-PHYSSCALE=1;
 
 -- Verb values
 VERB_NOP=0;
@@ -18,6 +18,11 @@ VERB_DOWN=5;
 VERB_ACT=6;
 VERB_AUTO=7;
 VERB_EXIT=8;
+
+-- Variables
+hp=1;
+maxhp=1;
+inventory={};
 
 function verb_right(o) end
 function verb_left(o) end
@@ -34,11 +39,6 @@ function verb_act(o, n) end
 function verb_talk(o, s)
    talk("<" .. o.name .. "> " .. s)
 end
-
-function objectcollide(o, o2)
-end
-
-function physics(o) end
 
 function freezevar(n, v)
    local s = "";

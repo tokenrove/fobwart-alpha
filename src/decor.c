@@ -27,52 +27,9 @@
 #include "fobwart.h"
 
 
-enum { EBAR_W = 8, EBAR_H = 48, EBAR_MAXSLIVERS = 24 };
-
-d_image_t *ebar_new(d_image_t *raster);
-void ebar_draw(d_image_t *bar, d_color_t primary, int a, int b);
-
 /* Low-level decor routines */
 void decor_ll_mm2screen(d_image_t *bg);
 void decor_ll_mm2window(d_image_t *bg, d_rect_t r);
-
-
-d_image_t *ebar_new(d_image_t *raster)
-{
-    d_image_t *p;
-    d_rasterdescription_t mode;
-
-    mode = raster->desc;
-    mode.w = EBAR_W;
-    mode.h = EBAR_H;
-
-    p = d_image_new(mode);
-    d_image_wipe(p, 0, 255);
-    if(p->desc.paletted)
-        p->palette = raster->palette;
-    return p;
-}
-
-
-void ebar_draw(d_image_t *bar, d_color_t primary, int a, int b)
-{
-    int i, nslivers;
-    d_point_t pt;
-    d_color_t c[EBAR_W] = { 15, 38, 38, 32, 32, 38, 38, 15 };
-
-    nslivers = a*EBAR_MAXSLIVERS/b;
-    c[0] = c[7] = d_color_fromrgb(bar, 0, 0, 0);
-    c[1] = c[2] = c[6] = c[5] = primary;
-    c[3] = c[4] = d_color_fromrgb(bar, 255, 255, 255);
-    d_image_wipe(bar, c[0], 255);
-    pt.x = 0;
-    pt.y = (EBAR_MAXSLIVERS-nslivers)*2+1;
-
-    for(i = 0; i < nslivers; i++, pt.y+=2) {
-        for(pt.x = 0; pt.x < EBAR_W-1; pt.x++)
-            d_image_setpelcolor(bar, pt, c[pt.x]);
-    }
-}
 
 
 void decor_ll_mm2screen(d_image_t *bg)

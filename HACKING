@@ -89,47 +89,54 @@ TODO
 
 
 Bugs:
- 1) Hang (probably in server) when a character jumps off the level... seems
-    to be fixed after integration of pumpkin physics code, but could
-    come back and bite us.
  2) Numerous gaping memory leaks (especially packets from the network,
     ev.auxdata, et cetera).
  3) Many portions are very little-endian dependant...
  4) Object location should not be stored in two different places. Perhaps
     remove room->contents from the database?
- 5) Key setup is ridiculous atm
+ 5) Key setup (bindings) is ridiculous atm
 
 Features:
 
  Ordered:
  - lua room access
- - configuration file specifying server, key setup, et cetera.
- 3) Debugging console.
  4) Dual-worlds system.
  5) Server db sync at regular intervals.
  6) Add server controls (at the very least, reload when SIGHUP'd)
- 7) Add ``really quit?'' dialog if escape is hit.
+ - ownership/permissions model
+ - Windows port
+ - debugging console lua access
  Make-or-break:
  - implement death
  - implement projectiles
  - implement items, inventory
  - object collide scripting
  - online tilemap editor (partially written), script editor
+ - modularize decor/windowing code, so that dialogs can be more easily
+   created (partially written)
  Important:
  - demo recording
  - tile scripting (collide and normal)
+ - music system with shared sample-bank
  - display completion information/progress bar/spinning pipe on server
    sync
- - modularize decor/windowing code, so that dialogs can be more easily
- created
- - develop tools for profiling network usage
- - look at pros and cons of merging seperate object lua states into
- one
+ - push algorithm in collisions.
+ - merge seperate object lua states into one
+ - sprite format should have animations defined by a set of frames followed
+   by their order, to take advantage of redundant frames
+ - all formats should support compression
  Bells-and-whistles:
+ - automatic palette generation based on lighting level
+ - final fight-style display of enemy health bars
+ - configuration file specifying server, key setup, et cetera.
+ - challenge-response authentication
  - megaman teleport routine
  - megaman death routine
  - sprite segmentation
  - login loop with reconnect, server and port fields
+ - develop tools for profiling network usage
+ - I'd like to do more with exits... more of an exit->entrance mapping
+   system than the current hack.
 
 
 
@@ -202,6 +209,7 @@ PACK_GETRESLIST | 11    | Sent by client to request resource checksums
 PACK_RESLIST    | 12    | Packet contains resource checksum list
 PACK_GETFILE    | 13    | Sent by client to request a resource file
 PACK_FILE       | 14    | Packet contains resource file
+PACK_FAILURE	| 15	| Sent by server to denote that a request failed
 ________________|_______|_______________________________________________
 
 
@@ -319,6 +327,23 @@ The checksum used is CRC-32 with 0x04C11DB7 as the polynomial, which I
 believe is used by ethernet, FDDI, and others.
 
 
+Ownership and authentication:
+
+Superusers may:
+ - write all resources
+ - broadcast arbitrary script
+ - remotely restart/control server
+ - lock/unlock user accounts
+ - change ownerships, passwords
+
+Normal users may:
+ - write any rooom they own
+ - change own password
+
+Guest users may do nothing other than log in and interact with the world
+as ``normal''.
+
+
 Events and their default mappings:
 
 EV_QUIT		Leave the current mode/dialog, 		D_KBD_ESCAPE
@@ -331,3 +356,32 @@ EV_JUMP		Jump.					D_KBD_LEFTCONTROL
 		
 
 Configuration file:
+
+
+Widget system:
+
+A widget is created by calling one of:
+  gamewidget_init
+  msgboxwidget_init
+  ebarwidget_init
+  greetingwidget_init
+  inventorywidget_init
+  consolewidget_init
+  tmapmainwidget_init
+  tmappalettewidget_init
+  yesnodialog_init
+
+These functions return a pointer to a widget_t (w), which will have
+the fields for w->input(), w->update(), and w->close(). It also has a
+bool member, w->takefocus, which indicates whether or not w->input()
+is valid to be called, and another bool member, w->hasfocus, which
+should be set by the caller to indicate whether this widget has focus.
+
+The w->update() function returns a bool which indicates whether or not
+the widget is finished. If the widget is finished, its return value
+may be obtained by its own specific return function, for example,
+yesnodialog_return(). Then it should be destroyed with w->close().
+
+Input and Update take...
+
+raster, palette, fonts, fps, bounce, 

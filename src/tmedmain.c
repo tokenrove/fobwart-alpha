@@ -16,9 +16,10 @@
 
 
 int tmapmode(gamedata_t *gd);
-void drawoutline(d_image_t *dst, d_point_t initpt, word w, word h,
-		 d_color_t c);
-void tilepalettescreen(gamedata_t *gd, d_tilemap_t *map, byte tile[2]);
+static void drawoutline(d_image_t *dst, d_point_t initpt, word w, word h,
+			d_color_t c);
+static void tilepalettescreen(gamedata_t *gd, d_tilemap_t *map, byte tile[2]);
+
 
 int tmapmode(gamedata_t *gd)
 {
@@ -41,17 +42,10 @@ int tmapmode(gamedata_t *gd)
     if(status == failure || p.type != PACK_ROOM) return -1;
     deskelroom(&p.body.room);
     map = p.body.room.map;
+    d_manager_addimagelayer(p.body.room.bg, &p.body.room.bghandle, -1);
     d_manager_addtilemaplayer(map, &mphnd, 0);
 
-    /* Reset type buffer */
-    gd->type.pos = 0;
-    gd->type.nalloc = 0;
-    gd->type.buf = NULL;
-    gd->type.done = false;
-
     /* Reset some miscellaneous variables */
-
-    /* gd->focuswidget = 0; */
     pt.x = pt.y = 0;
 
     while(1) {
@@ -59,13 +53,10 @@ int tmapmode(gamedata_t *gd)
         d_event_update();
 
         /* emergency exit key */
-        if(d_event_ispressed(EV_QUIT) && !gd->bounce[EV_QUIT]) {
+        if(d_event_ispressed(EV_QUIT) && !isbounce(EV_QUIT)) {
 	    break;
 	}
 
-	/*
-	  gd->widgets[gd->focuswidget].input(gd);
-	*/
         if(d_event_ispressed(EV_LEFT) && pt.x > 0) {
 	    pt.x--;
 	} else if(d_event_ispressed(EV_RIGHT) && pt.x < map->w-1) {
@@ -84,78 +75,34 @@ int tmapmode(gamedata_t *gd)
 	    map->map[pt.x+pt.y*map->w] = tile[1];
 	}
 
-	if(d_event_ispressed(EV_TAB) && !gd->bounce[EV_TAB]) {
-	    debouncecontrols(gd->bounce);
+	if(d_event_ispressed(EV_TAB) && !isbounce(EV_TAB)) {
+	    debouncecontrols();
 	    /* Bring up tile palette */
 	    /* widgetslide(tilepalettewidget, pt, EV_TAB); */
 	    tilepalettescreen(gd, map, tile);
 	    /* widgetslide(tilepalettewidget, pt, EV_TAB); */
 	}
 
-	/* Note that we can only do this trick because of how
-	   keymap is mapped in local.c */
-	if(d_event_ispressed(EV_SHIFT) && d_event_ispressed(D_KBD_S) &&
-	   !gd->bounce[D_KBD_S]) {
+	if(d_event_ispressed(EV_CONSOLE) && !isbounce(EV_CONSOLE)) {
+	    /* Push room */
+	    d_error_debug("Tried to save %s (%d)\n", p.body.room.name,
+			  p.body.room.handle);
+	    status = net_writepack(gd->nh, p);
+	    if(status == failure) return -1;
+	    d_error_debug("Seemed to succeed.\n");
+	    /* Push file */
 /*	    savetmap(p.body.room.mapname, map);
 	    p.type = PACK_FILE;
 	    p.body.file.checksum = checksumfile(p.body.room.mapname); */
-	    /* Push file */
-	    d_error_debug("Tried to save %s\n", p.body.room.mapname);
 	}
 
-	debouncecontrols(gd->bounce);
+	debouncecontrols();
 
 	/*
 	  for(i = 0; i < gd->nwidgets; i++)
 	      gd->widgets[i].update(gd);
 	*/
         /* update graphics */
-	camera.x = pt.x*map->tiledesc.w-gd->raster->desc.w/2;
-	if(camera.x < 0)
-	    camera.x = 0;
-	else if(camera.x+gd->raster->desc.w > map->w*map->tiledesc.w)
-	    camera.x = map->w*map->tiledesc.w-gd->raster->desc.w;
-
-	camera.y = pt.y*map->tiledesc.h-(gd->raster->desc.h-40)/2;
-	if(camera.y < 0)
-	    camera.y = 0;
-	else if(camera.y+gd->raster->desc.h-40 > map->w*map->tiledesc.h)
-	    camera.y = map->h*map->tiledesc.h-gd->raster->desc.h-40;
-
-	d_image_wipe(gd->raster, 16, 255);
-
-	d_manager_jump(camera.x, camera.y);
-	d_manager_draw(gd->raster);
-
-	camera.x = pt.x*map->tiledesc.w-camera.x;
-	camera.y = pt.y*map->tiledesc.h-camera.y;
-	d_image_blit(gd->raster, map->tiles[tile[0]], camera);
-
-	outline = (outline+1);
-	drawoutline(gd->raster, camera, map->tiledesc.w, map->tiledesc.h,
-		    outline);
-
-        /* update decor */
-        /* update text */
-	c = d_color_fromrgb(gd->raster, 220, 220, 170);
-	/* Draw message box. */
-	camera.x = 0;
-	camera.y = 200;
-	for(camera.y = 200; camera.y < gd->raster->desc.h; camera.y++)
-	    for(camera.x = 0; camera.x < gd->raster->desc.w; camera.x++) {
-		d_image_setpelcolor(gd->raster, camera, c);
-	    }
-
-	camera.x = 2;
-	camera.y = 202;
-	d_font_printf(gd->raster, gd->deffont, camera, "%s",
-		      p.body.room.name);
-
-	camera.x = gd->raster->desc.w-4-map->tiledesc.w;
-	d_image_blit(gd->raster, map->tiles[tile[0]], camera);
-	camera.y += map->tiledesc.h+2;
-	camera.x += 2;
-	d_image_blit(gd->raster, map->tiles[tile[1]], camera);
 
 	/* update greeting message */
 
@@ -164,27 +111,6 @@ int tmapmode(gamedata_t *gd)
     }
 
     return 0;
-}
-
-
-void drawoutline(d_image_t *dst, d_point_t initpt, word w, word h, d_color_t c)
-{
-    d_point_t pt;
-
-    for(pt.y = initpt.y; pt.y < initpt.y+h; pt.y++) {
-	pt.x = initpt.x;
-	d_image_setpelcolor(dst, pt, c);
-	pt.x = initpt.x+w-1;
-	d_image_setpelcolor(dst, pt, c);
-    }
-    for(pt.x = initpt.x; pt.x < initpt.x+w; pt.x++) {
-	pt.y = initpt.y;
-	d_image_setpelcolor(dst, pt, c);
-	pt.y = initpt.y+h-1;
-	d_image_setpelcolor(dst, pt, c);
-    }
-
-    return;
 }
 
 
@@ -202,22 +128,22 @@ void tilepalettescreen(gamedata_t *gd, d_tilemap_t *map, byte tile[2])
     /* Slide in */
     pos.x = gd->raster->desc.w-1;
  slidein:
-    debouncecontrols(gd->bounce);
+    debouncecontrols();
     pos.y = 0;
     for(; pos.x > 0; pos.x-=10) {
         th = d_time_startcount(gd->fps, false);
         d_event_update();
 
         /* emergency exit key */
-        if(d_event_ispressed(EV_QUIT) && !gd->bounce[EV_QUIT]) {
+        if(d_event_ispressed(EV_QUIT) && !isbounce(EV_QUIT)) {
 	    return;
 	}
 
-	if(d_event_ispressed(EV_TAB) && !gd->bounce[EV_TAB]) {
+	if(d_event_ispressed(EV_TAB) && !isbounce(EV_TAB)) {
 	    goto slideout;
 	}
 
-	debouncecontrols(gd->bounce);
+	debouncecontrols();
 
 	/* Draw message box. */
 	pt.x = pos.x; pt.y = pos.y;
@@ -241,17 +167,17 @@ void tilepalettescreen(gamedata_t *gd, d_tilemap_t *map, byte tile[2])
         d_event_update();
 
         /* emergency exit key */
-        if(d_event_ispressed(EV_QUIT) && !gd->bounce[EV_QUIT]) {
+        if(d_event_ispressed(EV_QUIT) && !isbounce(EV_QUIT)) {
 	    return;
 	}
 
-	if(d_event_ispressed(EV_LEFT) && !gd->bounce[EV_LEFT]) {
+	if(d_event_ispressed(EV_LEFT) && !isbounce(EV_LEFT)) {
 	    do {
 		cursor--;
 		if(cursor < 0)
 		    cursor = map->ntiles-1;
 	    } while(map->tiles[cursor] == NULL);
-	} else if(d_event_ispressed(EV_RIGHT) && !gd->bounce[EV_RIGHT]) {
+	} else if(d_event_ispressed(EV_RIGHT) && !isbounce(EV_RIGHT)) {
 	    do {
 		cursor++;
 		if(cursor > map->ntiles-1)
@@ -264,11 +190,11 @@ void tilepalettescreen(gamedata_t *gd, d_tilemap_t *map, byte tile[2])
 	if(d_event_ispressed(EV_JUMP))
 	    tile[1] = cursor;
 
-	if(d_event_ispressed(EV_TAB) && !gd->bounce[EV_TAB]) {
+	if(d_event_ispressed(EV_TAB) && !isbounce(EV_TAB)) {
 	    break;
 	}
 
-	debouncecontrols(gd->bounce);
+	debouncecontrols();
 
 	/* Draw message box. */
 	pt.x = 0; pt.y = 0;
@@ -313,22 +239,22 @@ void tilepalettescreen(gamedata_t *gd, d_tilemap_t *map, byte tile[2])
     /* Slide out */
     pos.x = 0;
  slideout:
-    debouncecontrols(gd->bounce);
+    debouncecontrols();
     pos.y = 0;
     for(; pos.x < gd->raster->desc.w; pos.x+=10) {
         th = d_time_startcount(gd->fps, false);
         d_event_update();
 
         /* emergency exit key */
-        if(d_event_ispressed(EV_QUIT) && !gd->bounce[EV_QUIT]) {
+        if(d_event_ispressed(EV_QUIT) && !isbounce(EV_QUIT)) {
 	    return;
 	}
 
-	if(d_event_ispressed(EV_TAB) && !gd->bounce[EV_TAB]) {
+	if(d_event_ispressed(EV_TAB) && !isbounce(EV_TAB)) {
 	    goto slidein;
 	}
 
-	debouncecontrols(gd->bounce);
+	debouncecontrols();
 
 	/* Draw message box. */
 	pt.x = 0; pt.y = 0;

@@ -105,6 +105,8 @@ void exitobject(void *gd_, objhandle_t subject, roomhandle_t location)
     d_set_fetch(gd->ws.rooms, o->location, (void **)&room);
 
     if(gd->localobj == subject) {
+	while(evsk_pop(&gd->ws.evsk, NULL));
+
 	/* If it's us, flush some things, get the new room. */
 	d_tilemap_delete(room->map);
 	d_image_delete(room->bg);

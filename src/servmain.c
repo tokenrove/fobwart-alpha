@@ -1,7 +1,6 @@
 /* 
- * fobserv.c
+ * servmain.c
  * Created: Wed Jul 18 03:15:09 2001 by tek@wiw.org
- * Revised: Fri Jul 27 03:27:36 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -30,6 +29,7 @@ void unframe(serverdata_t *sd);
 void mainloop(serverdata_t *sd);
 void updatemanagedframes(worldstate_t *ws);
 void checktransitions(serverdata_t *sd);
+void pushroom(serverdata_t *sd, room_t *room, packet_t *p);
 
 
 int main(void)
@@ -96,6 +96,9 @@ int main(void)
 }
 
 
+/* mainloop
+ * The main game loop, simulates the world, listens for connections, handles
+ * clients. */
 void mainloop(serverdata_t *sd)
 {
     nethandle_t *clinh;
@@ -179,6 +182,8 @@ void mainloop(serverdata_t *sd)
 }
 
 
+/* sendevents
+ * Distribute this frame's events to appropriate clients. */
 void sendevents(serverdata_t *sd)
 {
     event_t ev;
@@ -221,6 +226,8 @@ void sendevents(serverdata_t *sd)
 }
 
 
+/* unframe
+ * Tell each client that this frame is finished. */
 void unframe(serverdata_t *sd)
 {
     client_t *cli;
@@ -242,6 +249,8 @@ void unframe(serverdata_t *sd)
 }
 
 
+/* handleclient
+ * Deal with a request from a client. */
 int handleclient(client_t *cli, serverdata_t *sd)
 {
     packet_t p;
@@ -256,10 +265,10 @@ int handleclient(client_t *cli, serverdata_t *sd)
 	switch(p.type) {
 	case PACK_LOGIN:
             d_error_debug("Login attempt from %d (%s)", cli->handle,
-                          p.body.login.name.data);
+                          p.body.login.name.data); /* FIXME logfile */
             status = verifylogin(sd->logindb, (char *)p.body.login.name.data,
                                  (char *)p.body.login.password.data,
-                                 &p.body.handle);
+                                 &p.body.handle, &cli->class);
             if(status == success) {
                 d_error_debug(" succeeded.\n");
                 p.type = PACK_AYUP;
@@ -311,6 +320,11 @@ int handleclient(client_t *cli, serverdata_t *sd)
                               (char *)p.body.event.auxdata:"");
                 return -1;
             }
+	    if(p.body.event.verb == VERB_EXIT && cli->class != 2) {
+                d_error_debug("Got exit from %d, who is not class 2.\n",
+			      cli->handle);
+		return -1;
+	    }
             evsk_push(&sd->ws.evsk, p.body.event);
             break;
 
@@ -344,6 +358,23 @@ int handleclient(client_t *cli, serverdata_t *sd)
             p.body.room = *room;
             net_writepack(cli->nh, p);
             break;
+
+	case PACK_ROOM:
+	    /* Someone is pushing a room back to us. */
+	    /* Store the room. */
+	    /* FIXME destroy the old room */
+	    room = d_memory_new(sizeof(room_t));
+	    d_memory_copy(room, &p.body.room, sizeof(room_t));
+	    deskelroom(room);
+	    d_set_remove(sd->ws.rooms, room->handle);
+	    d_set_add(sd->ws.rooms, room->handle, room);
+	    /* Send the room to everyone it contains. */
+	    pushroom(sd, room, &p);
+	    break;
+
+	default:
+            d_error_debug("%d sent a weird packet (%d).\n", cli->handle, p.type);
+            return -1;
         }
         break;
 
@@ -380,6 +411,26 @@ void wipeclient(d_set_t *clients, dword key)
     cli->nh = NULL;
     cli->handle = -1;
     d_memory_delete(cli);
+    return;
+}
+
+
+/* pushroom
+ * Forces a room to everyone it contains. */
+void pushroom(serverdata_t *sd, room_t *room, packet_t *p)
+{
+    client_t *cli;
+    dword key;
+    d_iterator_t it;
+
+    d_iterator_reset(&it);
+    while(key = d_set_nextkey(&it, sd->clients), key != D_SET_INVALIDKEY) {
+        d_set_fetch(sd->clients, key, (void **)&cli);
+        if(!d_set_fetch(room->contents, cli->handle, NULL))
+            continue;
+        if(net_writepack(cli->nh, *p) != success)
+            wipeclient(sd->clients, key);
+    }
     return;
 }
 

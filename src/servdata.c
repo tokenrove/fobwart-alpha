@@ -54,8 +54,7 @@ bool getobject(serverdata_t *sd, objhandle_t handle)
     status = d_set_add(sd->ws.objs, o->handle, (void *)o);
     if(status == failure) return failure;
 
-    status = deskelobject(o);
-    return status;
+    return success;
 }
 
 
@@ -87,16 +86,17 @@ bool loadservdata(serverdata_t *sd)
     room_t *room;
     object_t *o;
     d_iterator_t it, it2;
+    char *s;
 
     checksuminit();
     memset(&sd->reslist, 0, sizeof(sd->reslist));
 
     /* Setup some initial resources required. */
-    reslist_add(&sd->reslist, DATADIR, "defobj", ".luc");
-    reslist_add(&sd->reslist, DATADIR, "light", ".pal");
-    reslist_add(&sd->reslist, DATADIR, "dark", ".pal");
-    reslist_add(&sd->reslist, DATADIR, "def", ".fnt");
-    reslist_add(&sd->reslist, DATADIR, "slant", ".fnt");
+    reslist_add(&sd->reslist, SCRIPTDATADIR, "defobj", ".luc");
+    reslist_add(&sd->reslist, PALETTEDATADIR, "light", ".pal");
+    reslist_add(&sd->reslist, PALETTEDATADIR, "dark", ".pal");
+    reslist_add(&sd->reslist, FONTDATADIR, "def", ".fnt");
+    reslist_add(&sd->reslist, FONTDATADIR, "slant", ".fnt");
 
     /* load room db */
     sd->ws.rooms = d_set_new(0);
@@ -116,8 +116,13 @@ bool loadservdata(serverdata_t *sd)
 	deskelroom(room);
 
 	/* Generate reslist entries for this room's data. */
-	reslist_add(&sd->reslist, DATADIR, room->bgname, ".pcx");
-	reslist_add(&sd->reslist, DATADIR, room->mapname, ".map");
+	reslist_add(&sd->reslist, BGDATADIR, room->bgname, ".pcx");
+	d_iterator_reset(&it2);
+	while(key2 = d_set_nextkey(&it2, room->mapfiles),
+	      key2 != D_SET_INVALIDKEY) {
+	    d_set_fetch(room->mapfiles, key2, (void **)&s);
+	    reslist_add(&sd->reslist, TILEDATADIR, s, ".pcx");
+	}
 
         d_iterator_reset(&it2);
         while(key2 = d_set_nextkey(&it2, room->contents),
@@ -136,8 +141,8 @@ bool loadservdata(serverdata_t *sd)
             }
 
 	    /* Generate reslist entries for this object. */
-	    reslist_add(&sd->reslist, DATADIR, o->spname, ".spr");
-	    reslist_add(&sd->reslist, DATADIR, o->spname, ".luc");
+	    reslist_add(&sd->reslist, SPRITEDATADIR, o->spname, ".spr");
+	    reslist_add(&sd->reslist, SCRIPTDATADIR, o->spname, ".luc");
         }
     }
 

@@ -3,7 +3,7 @@
 # Julian Squires <tek@wiw.org> / 2001
 #
 
-EDLOGINOBJS=edlogin.o db.o
+EDLOGINOBJS=edlogin.o db.o lua.o util.o data.o nulllua.o
 EDLOGINHEADERS=fobdb.h
 
 $(EDLOGINOBJS): $(EDLOGINHEADERS)
@@ -11,7 +11,7 @@ edlogin: $(EDLOGINOBJS)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 
-EDOBJECTOBJS=edobject.o db.o
+EDOBJECTOBJS=edobject.o db.o lua.o util.o data.o nulllua.o
 EDOBJECTHEADERS=fobwart.h fobdb.h
 
 $(EDOBJECTOBJS): $(EDOBJECTHEADERS)
@@ -19,7 +19,7 @@ edobject: $(EDOBJECTOBJS)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 
-EDROOMOBJS=edroom.o db.o
+EDROOMOBJS=edroom.o db.o lua.o util.o data.o nulllua.o
 EDROOMHEADERS=fobwart.h fobdb.h
 
 $(EDROOMOBJS): $(EDROOMHEADERS)

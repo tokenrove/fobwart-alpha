@@ -80,10 +80,6 @@ int main(int argc, char **argv)
                 } else if(comspec == 10) {
                     object.onground = (strcmp(argv[i], "false"))?true:false;
                 } else if(comspec == 11) {
-                    object.hp = atoi(argv[i]);
-                } else if(comspec == 12) {
-                    object.maxhp = atoi(argv[i]);
-                } else if(comspec == 13) {
                     object.spname = argv[i];
                 } else {
                     d_error_fatal("Too many arguments.\n");
@@ -128,7 +124,7 @@ int main(int argc, char **argv)
     case HELP:
         printf("commands: help\n"
                "          create\n"
-               "          add <handle> <name> <location> <x> <y> <ax> <ay> <vx> <vy> <onground> <hp> <maxhp> <spname>\n"
+               "          add <handle> <name> <location> <x> <y> <ax> <ay> <vx> <vy> <onground> <spname>\n"
                "          remove <handle>\n"
                "          view <handle>\n"
                "          change <handle> <field> <value>\n");
@@ -160,10 +156,6 @@ int main(int argc, char **argv)
             object.vy = atoi(value);
         } else if(strcmp(field, "onground") == 0) {
             object.onground = (strcmp(argv[i], "false"))?true:false;
-        } else if(strcmp(field, "hp") == 0) {
-            object.hp = atoi(value);
-        } else if(strcmp(field, "maxhp") == 0) {
-            object.maxhp = atoi(value);
         } else if(strcmp(field, "spname") == 0) {
             object.spname = value;
         } else
@@ -181,6 +173,7 @@ int main(int argc, char **argv)
         break;
 
     case ADD:
+	deskelobject(&object);
         status = objectdb_put(dbh, key, &object);
         if(status != success)
             d_error_fatal("Couldn't store object.");
@@ -193,11 +186,11 @@ int main(int argc, char **argv)
 
         printf("%d -> name => %s, location => %d,\n pos => (%d, %d),\n "
                "accel => (%d, %d),\n velocity => (%d, %d),\n "
-               "onground => %s,\n hp => (%d/%d)\n spname => %s\n",
+               "onground => %s,\n spname => %s\n",
                key, object.name, object.location, object.x,
                object.y, object.ax, object.ay, object.vx, object.vy,
                (object.onground == false) ? "false":"true",
-               object.hp, object.maxhp, object.spname);
+               object.spname);
         break;
     }
 

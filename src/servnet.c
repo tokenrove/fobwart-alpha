@@ -80,7 +80,7 @@ void net_servselect(nethandle_t *servnh_, bool *servisactive, d_set_t *clients,
     }
 
     timeout.tv_sec = 0;
-    timeout.tv_usec = 16000;
+    timeout.tv_usec = 16000; /* FIXME: fps */
     select(nfds+1, &readfds, NULL, NULL, &timeout);
 
     nh = servnh_;

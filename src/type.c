@@ -27,9 +27,8 @@
 #include "fobcli.h"
 
 
-void debouncecontrols(bool *bounce);
 void insertchar(typebuf_t *type, int i, bool shift);
-int handletextinput(typebuf_t *type, bool *bounce);
+int handletextinput(typebuf_t *type);
 
 
 #define TYPEALLOCINC 16
@@ -75,7 +74,7 @@ void insertchar(typebuf_t *type, int i, bool shift)
 }
 
 
-int handletextinput(typebuf_t *type, bool *bounce)
+int handletextinput(typebuf_t *type)
 {
     int i;
     int keymap[48] = { D_KBD_GRAVE, D_KBD_1, D_KBD_2, D_KBD_3, D_KBD_4,
@@ -90,21 +89,19 @@ int handletextinput(typebuf_t *type, bool *bounce)
                        D_KBD_N, D_KBD_M, D_KBD_COMMA, D_KBD_PERIOD,
                        D_KBD_SLASH, D_KBD_SPACE };
 
-    if(d_event_ispressed(EV_ENTER) && !bounce[EV_ENTER]) {
-        debouncecontrols(bounce);
+    if(d_event_ispressed(EV_ENTER) && !isbounce(EV_ENTER)) {
         return 1;
     }
 
     for(i = EV_ALPHABEGIN; i < EV_ALPHAEND; i++)
-        if(d_event_ispressed(i) && !bounce[i]) {
+        if(d_event_ispressed(i) && !isbounce(i)) {
             insertchar(type, keymap[i-EV_ALPHABEGIN],
                        d_event_ispressed(EV_SHIFT));
         }
-    if(d_event_ispressed(EV_BACKSPACE) && !bounce[EV_BACKSPACE])
+    if(d_event_ispressed(EV_BACKSPACE) && !isbounce(EV_BACKSPACE))
         if(type->pos > 0)
             type->buf[type->pos--] = 0;
 
-    debouncecontrols(bounce);
     return 0;
 }
 

@@ -65,6 +65,8 @@ int main(int argc, char **argv)
                 } else if(comspec == 2) {
                     loginrec.password = argv[i];
                 } else if(comspec == 3) {
+                    loginrec.class = atoi(argv[i]);
+                } else if(comspec == 4) {
                     loginrec.object = atoi(argv[i]);
                 } else
                     d_error_fatal("Too many arguments.\n");
@@ -104,7 +106,7 @@ int main(int argc, char **argv)
     case HELP:
         printf("commands: help\n"
                "          create\n"
-               "          add <name> <password> <object>\n"
+               "          add <name> <password> <class> <object>\n"
                "          remove <name>\n"
                "          view <name>\n"
                "          change <name> <field> <value>\n");
@@ -120,6 +122,8 @@ int main(int argc, char **argv)
 
         if(strcmp(field, "password") == 0) {
             loginrec.password = value;
+        } else if(strcmp(field, "class") == 0) {
+            loginrec.class = atoi(value);
         } else if(strcmp(field, "object") == 0) {
             loginrec.object = atoi(value);
         } else
@@ -147,7 +151,8 @@ int main(int argc, char **argv)
         if(status != success)
             d_error_fatal("Failed to retrieve record.\n");
 
-        printf("%s -> %s, %d\n", key, loginrec.password, loginrec.object);
+        printf("%s -> %d, class %d, password %s\n", key, loginrec.object,
+	       loginrec.class, loginrec.password);
         break;
     }
 

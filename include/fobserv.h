@@ -12,6 +12,7 @@ typedef struct client_s {
     objhandle_t handle;
     nethandle_t *nh;
     int state;
+    byte class;
 } client_t;
 
 typedef struct serverdata_s {

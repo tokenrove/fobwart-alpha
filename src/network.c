@@ -54,12 +54,12 @@
 #include "net.h"
 
 
-bool net_syncevents(nethandle_t *nh, eventstack_t *evsk);
 void net_close(nethandle_t *nh_);
 bool net_login(nethandle_t *nh, char *uname, char *password,
                objhandle_t *localobj);
 bool net_newclient(nethandle_t **nh_, char *servname, int port);
 bool net_newserver(nethandle_t **nh_, int port);
+bool net_canread(nethandle_t *nh_);
 
 bool net_readpack(nethandle_t *nh_, packet_t *p);
 bool net_writepack(nethandle_t *nh_, packet_t p);
@@ -173,35 +173,6 @@ bool net_login(nethandle_t *nh, char *uname, char *password,
 }
 
 
-bool net_syncevents(nethandle_t *nh, eventstack_t *evsk)
-{
-    bool status;
-    packet_t p;
-
-    p.type = PACK_EVENT;
-    while(evsk_pop(evsk, &p.body.event))
-        net_writepack(nh, p);
-
-    p.type = PACK_FRAME;
-    status = net_writepack(nh, p);
-    if(status == failure) {
-        d_error_debug(__FUNCTION__": write frame failed.\n");
-        return failure;
-    }
-    while(status = net_readpack(nh, &p), status != failure &&
-                                         p.type != PACK_FRAME) {
-        if(p.type != PACK_EVENT)
-            d_error_debug(__FUNCTION__": read event failed.\n");
-        evsk_push(evsk, p.body.event);
-    }
-    if(status == failure) {
-        d_error_debug(__FUNCTION__": read frame failed.\n");
-        return failure;
-    }
-    return success;
-}
-
-
 void net_close(nethandle_t *nh_)
 {
     nh_t *nh = nh_;
@@ -213,19 +184,46 @@ void net_close(nethandle_t *nh_)
 }
 
 
+/* net_canread
+ * Check if there is data to be read from the given nethandle. */
+bool net_canread(nethandle_t *nh_)
+{
+    nh_t *nh = nh_;
+    fd_set readfds;
+    struct timeval timeout;
+
+    FD_ZERO(&readfds);
+    FD_SET(nh->socket, &readfds);
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 0;
+
+    return (select(1, &readfds, NULL, NULL, &timeout) == 1) ? true : false;
+}
+
+
 #define READBYTE(d) { i = read(nh->socket, &(d), 1); \
                       if(i == -1) goto error; \
                       if(i == 0) return failure; }
 
-#define READWORD(d, t) { i = read(nh->socket, &(t), 2); \
-                         if(i == -1) goto error; \
-                         if(i == 0) return failure; \
-                         (d) = ntohs((t)); }
+#define READWORD(d) { i = read(nh->socket, &(d), 2); \
+                      if(i == -1) goto error; \
+                      if(i == 0) return failure; \
+                      (d) = ntohs((d)); }
 
-#define READDWORD(d, t) { i = read(nh->socket, &(t), 4); \
-                          if(i == -1) goto error; \
-                          if(i == 0) return failure; \
-                          (d) = ntohl((t)); }
+#define READDWORD(d) { i = read(nh->socket, &(d), 4); \
+                       if(i == -1) goto error; \
+                       if(i == 0) return failure; \
+                       (d) = ntohl((d)); }
+
+#define READSTRING(s) { READDWORD((s).len); \
+                        if((s).len > 0) { \
+                            (s).data = d_memory_new((s).len); \
+                            if((s).data == NULL) return failure; \
+                            i = readbuffer(nh->socket, (char *)(s).data, (s).len); \
+                            if(i == -1) goto error; \
+                            if(i == 0) return failure; \
+                        } else \
+                           (s).data = NULL; }
 
 #define WRITEBYTE(d) { i = write(nh->socket, &(d), 1); \
                        if(i == -1) goto error; \
@@ -249,11 +247,10 @@ bool net_readpack(nethandle_t *nh_, packet_t *p)
     int i, j;
     byte bytebuf;
     word wordbuf;
-    short shortbuf;
-    dword dwordbuf;
-    string_t *name, *password;
+    dword dwordbuf, key;
     dword statelen;
     nh_t *nh = nh_;
+    char *statebuf, *s;
 
     i = read(nh->socket, &p->type, 1);
     if(i == 0) return failure;
@@ -266,9 +263,9 @@ bool net_readpack(nethandle_t *nh_, packet_t *p)
         break;
 
     case PACK_EVENT:
-        READWORD(p->body.event.subject, wordbuf);
+        READWORD(p->body.event.subject);
         READBYTE(p->body.event.verb);
-        READDWORD(p->body.event.auxlen, dwordbuf);
+        READDWORD(p->body.event.auxlen);
         if(p->body.event.auxlen > 0) {
             p->body.event.auxdata = d_memory_new(p->body.event.auxlen);
             if(p->body.event.auxdata == NULL)
@@ -282,35 +279,14 @@ bool net_readpack(nethandle_t *nh_, packet_t *p)
         break;
 
     case PACK_LOGIN:
-        name = &p->body.login.name;
-        READDWORD(name->len, dwordbuf);
-        if(name->len > 0) {
-            name->data = d_memory_new(name->len);
-            if(name->data == NULL)
-                return failure;
-            i = readbuffer(nh->socket, (char *)name->data, name->len);
-            if(i == -1) goto error;
-            if(i == 0) return failure;
-        } else
-            name->data = NULL;
-
-        password = &p->body.login.password;
-        READDWORD(password->len, dwordbuf);
-        if(password->len > 0) {
-            password->data = d_memory_new(password->len);
-            if(password->data == NULL)
-                return failure;
-            i = readbuffer(nh->socket, (char *)password->data, password->len);
-            if(i == -1) goto error;
-            if(i == 0) return failure;
-        } else
-            password->data = NULL;
+	READSTRING(p->body.login.name);
+	READSTRING(p->body.login.password);
         break;
 
     case PACK_AYUP:
     case PACK_GETOBJECT:
     case PACK_GETROOM:
-        READWORD(p->body.handle, wordbuf);
+        READWORD(p->body.handle);
         break;
 
     case PACK_FRAME:
@@ -318,27 +294,13 @@ bool net_readpack(nethandle_t *nh_, packet_t *p)
         break;
 
     case PACK_GETFILE:
-	READDWORD(p->body.string.len, dwordbuf);
-        if(p->body.string.len > 0) {
-	    p->body.string.data = d_memory_new(p->body.string.len);
-            i = readbuffer(nh->socket, (char *)p->body.string.data,
-			   p->body.string.len);
-            if(i == -1) goto error;
-            if(i == 0) return failure;
-        }
+	READSTRING(p->body.string);
 	break;
 
     case PACK_FILE:
-	READDWORD(p->body.file.name.len, dwordbuf);
-        if(p->body.string.len > 0) {
-	    p->body.file.name.data = d_memory_new(p->body.file.name.len);
-            i = readbuffer(nh->socket, (char *)p->body.file.name.data,
-			   p->body.file.name.len);
-            if(i == -1) goto error;
-            if(i == 0) return failure;
-        }
-	READDWORD(p->body.file.length, dwordbuf);
-	READDWORD(p->body.file.checksum, dwordbuf);
+	READSTRING(p->body.file.name);
+	READDWORD(p->body.file.length);
+	READDWORD(p->body.file.checksum);
 	p->body.file.data = d_memory_new(p->body.file.length);
 	i = readbuffer(nh->socket, (char *)p->body.file.data,
 		       p->body.file.length);
@@ -347,14 +309,14 @@ bool net_readpack(nethandle_t *nh_, packet_t *p)
 	break;
 
     case PACK_RESLIST:
-	READWORD(p->body.reslist.length, wordbuf);
+	READWORD(p->body.reslist.length);
 	p->body.reslist.name = d_memory_new(p->body.reslist.length*
 					    sizeof(string_t));
 	p->body.reslist.checksum = d_memory_new(p->body.reslist.length*
 						sizeof(dword));
 
 	for(j = 0; j < p->body.reslist.length; j++) {
-	    READDWORD(p->body.reslist.name[j].len, dwordbuf);
+	    READDWORD(p->body.reslist.name[j].len);
 
 	    p->body.reslist.name[j].data = d_memory_new(p->body.reslist.name[j].len);
 	    i = readbuffer(nh->socket, (char *)p->body.reslist.name[j].data,
@@ -362,14 +324,12 @@ bool net_readpack(nethandle_t *nh_, packet_t *p)
 	    if(i == -1) goto error;
 	    if(i == 0) return failure;
 
-	    printf("%s\n", p->body.reslist.name[j].data);
-
-	    READDWORD(p->body.reslist.checksum[j], dwordbuf);
+	    READDWORD(p->body.reslist.checksum[j]);
 	}
 	break;
 
     case PACK_OBJECT:
-        READDWORD(dwordbuf, dwordbuf);
+        READDWORD(dwordbuf);
         if(dwordbuf > 0) {
             p->body.object.name = d_memory_new(dwordbuf);
             if(p->body.object.name == NULL)
@@ -380,26 +340,22 @@ bool net_readpack(nethandle_t *nh_, packet_t *p)
         } else
             p->body.object.name = NULL;
 
-        READWORD(p->body.object.handle, wordbuf);
-        READWORD(p->body.object.location, wordbuf);
+        READWORD(p->body.object.handle);
+        READWORD(p->body.object.location);
 
         /* physics */
-        READWORD(p->body.object.x, wordbuf);
-        READWORD(p->body.object.y, wordbuf);
-        READWORD(p->body.object.ax, shortbuf);
-        READWORD(p->body.object.ay, shortbuf);
-        READWORD(p->body.object.vx, shortbuf);
-        READWORD(p->body.object.vy, shortbuf);
+        READWORD(p->body.object.x);
+        READWORD(p->body.object.y);
+        READWORD(p->body.object.ax);
+        READWORD(p->body.object.ay);
+        READWORD(p->body.object.vx);
+        READWORD(p->body.object.vy);
 
         READBYTE(bytebuf);
         p->body.object.onground = (bytebuf&1) ? true : false;
 
-        /* statistics */
-        READWORD(p->body.object.hp, wordbuf);
-        READWORD(p->body.object.maxhp, wordbuf);
-
         /* graphics */
-        READDWORD(dwordbuf, dwordbuf);
+        READDWORD(dwordbuf);
         if(dwordbuf > 0) {
             p->body.object.spname = d_memory_new(dwordbuf);
             if(p->body.object.spname == NULL)
@@ -412,19 +368,29 @@ bool net_readpack(nethandle_t *nh_, packet_t *p)
         p->body.object.sprite = NULL;
 
         /* scripts */
-        READDWORD(statelen, dwordbuf);
+        READDWORD(statelen);
         if(statelen > 0) {
-            p->body.object.statebuf = d_memory_new(statelen);
-            if(p->body.object.statebuf == NULL) return failure;
+            statebuf = d_memory_new(statelen);
+            if(statebuf == NULL) return failure;
 
-            i = readbuffer(nh->socket, p->body.object.statebuf, statelen);
+            i = readbuffer(nh->socket, statebuf, statelen);
             if(i == -1) goto error;
             if(i == 0) return failure;
-        }
+
+        } else
+	    statebuf = NULL;
+
+	deskelobject(&p->body.object);
+
+	if(statelen > 0) {
+	    meltstate(p->body.object.luastate, statebuf);
+	    d_memory_delete(statebuf);
+	}
+
         break;
 
     case PACK_ROOM:
-        READDWORD(dwordbuf, dwordbuf);
+        READDWORD(dwordbuf);
         if(dwordbuf > 0) {
             p->body.room.name = d_memory_new(dwordbuf);
             if(p->body.room.name == NULL)
@@ -435,27 +401,59 @@ bool net_readpack(nethandle_t *nh_, packet_t *p)
         } else
             p->body.room.name = NULL;
 
-        READWORD(p->body.room.handle, wordbuf);
+        READDWORD(dwordbuf);
+        if(dwordbuf > 0) {
+            p->body.room.owner = d_memory_new(dwordbuf);
+            if(p->body.room.owner == NULL)
+                return failure;
+            i = readbuffer(nh->socket, p->body.room.owner, dwordbuf);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        } else
+            p->body.room.owner = NULL;
+
+        READWORD(p->body.room.handle);
 
         /* physics */
-        READWORD(p->body.room.gravity, wordbuf);
+        READWORD(p->body.room.gravity);
         READBYTE(bytebuf);
         p->body.room.islit = (bytebuf&1) ? true:false;
 
         /* tilemaps */
-        READDWORD(dwordbuf, dwordbuf);
-        if(dwordbuf > 0) {
-            p->body.room.mapname = d_memory_new(dwordbuf);
-            if(p->body.room.mapname == NULL)
-                return failure;
-            i = readbuffer(nh->socket, p->body.room.mapname, dwordbuf);
-            if(i == -1) goto error;
-            if(i == 0) return failure;
-        } else
-            p->body.room.mapname = NULL;
-        p->body.room.map = NULL;
+	p->body.room.map = d_memory_new(sizeof(d_tilemap_t));
+	d_memory_set(p->body.room.map, 0, sizeof(d_tilemap_t));
+	p->body.room.mapfiles = d_set_new(0);
 
-        READDWORD(dwordbuf, dwordbuf);
+        READWORD(p->body.room.map->w);
+        READWORD(p->body.room.map->h);
+
+	READBYTE(bytebuf);
+	while(bytebuf--) {
+	    READDWORD(key);
+	    READDWORD(dwordbuf);
+	    if(dwordbuf > 0) {
+		s = d_memory_new(dwordbuf);
+		if(s == NULL)
+		    return failure;
+		i = readbuffer(nh->socket, s, dwordbuf);
+		if(i == -1) goto error;
+		if(i == 0) return failure;
+	    } else
+		s = NULL;
+
+	    d_set_add(p->body.room.mapfiles, key, s);
+	}
+
+        p->body.room.map->map = d_memory_new(p->body.room.map->w*
+					     p->body.room.map->h);
+	d_memory_set(p->body.room.map->map, 0, p->body.room.map->w*
+		                               p->body.room.map->h);
+	i = readbuffer(nh->socket, (char *)p->body.room.map->map,
+		       p->body.room.map->w*p->body.room.map->h);
+	if(i == -1) goto error;
+	if(i == 0) return failure;
+
+        READDWORD(dwordbuf);
         if(dwordbuf > 0) {
             p->body.room.bgname = d_memory_new(dwordbuf);
             if(p->body.room.bgname == NULL)
@@ -469,12 +467,12 @@ bool net_readpack(nethandle_t *nh_, packet_t *p)
 
         /* contents */
         p->body.room.contents = NULL;
-        READDWORD(dwordbuf, dwordbuf);
+        READDWORD(dwordbuf);
         if(dwordbuf > 0) {
             p->body.room.contents = d_set_new(0);
 
             while(dwordbuf-- > 0) {
-                READWORD(wordbuf, wordbuf);
+                READWORD(wordbuf);
                 d_set_add(p->body.room.contents, wordbuf, NULL);
             }
         }
@@ -490,7 +488,7 @@ bool net_readpack(nethandle_t *nh_, packet_t *p)
     return success;
 error:
     d_error_debug(__FUNCTION__": %s\n", strerror(errno));
-    return failure;    
+    return failure;
 }
 
 
@@ -502,6 +500,7 @@ bool net_writepack(nethandle_t *nh_, packet_t p)
     short shortbuf;
     dword dwordbuf, statelen, key;
     nh_t *nh = nh_;
+    char *s;
     d_iterator_t it;
 
     i = write(nh->socket, &p.type, 1);
@@ -617,10 +616,6 @@ bool net_writepack(nethandle_t *nh_, packet_t p)
         bytebuf |= (p.body.object.onground == true) ? 1:0;
         WRITEBYTE(bytebuf);
 
-        /* statistics */
-        WRITEWORD(p.body.object.hp, wordbuf);
-        WRITEWORD(p.body.object.maxhp, wordbuf);
-
         /* graphics */
         WRITEDWORD(strlen(p.body.object.spname)+1, dwordbuf);
         if(strlen(p.body.object.spname) > 0) {
@@ -652,6 +647,14 @@ bool net_writepack(nethandle_t *nh_, packet_t p)
             if(i == 0) return failure;
         }
 
+        WRITEDWORD(strlen(p.body.room.owner)+1, dwordbuf);
+        if(strlen(p.body.room.owner) > 0) {
+            i = writebuffer(nh->socket, p.body.room.owner,
+			    strlen(p.body.room.owner)+1);
+            if(i == -1) goto error;
+            if(i == 0) return failure;
+        }
+
         WRITEWORD(p.body.room.handle, wordbuf);
 
         /* physics */
@@ -661,13 +664,28 @@ bool net_writepack(nethandle_t *nh_, packet_t p)
         WRITEBYTE(bytebuf);
 
         /* tilemaps */
-        WRITEDWORD(strlen(p.body.room.mapname)+1, dwordbuf);
-        if(strlen(p.body.room.mapname) > 0) {
-            i = writebuffer(nh->socket, p.body.room.mapname,
-			    strlen(p.body.room.mapname)+1);
+	WRITEWORD(p.body.room.map->w, wordbuf);
+	WRITEWORD(p.body.room.map->h, wordbuf);
+
+	bytebuf = d_set_nelements(p.body.room.mapfiles);
+	WRITEBYTE(bytebuf);
+
+	d_iterator_reset(&it);
+	while(key = d_set_nextkey(&it, p.body.room.mapfiles),
+	      key != D_SET_INVALIDKEY) {
+	    d_set_fetch(p.body.room.mapfiles, key, (void **)&s);
+	    WRITEDWORD(key, dwordbuf);
+	    WRITEDWORD(strlen(s)+1, dwordbuf);
+
+	    i = writebuffer(nh->socket, s, strlen(s)+1);
             if(i == -1) goto error;
             if(i == 0) return failure;
-        }
+	}
+
+	i = writebuffer(nh->socket, (char *)p.body.room.map->map,
+			p.body.room.map->w*p.body.room.map->h);
+	if(i == -1) goto error;
+	if(i == 0) return failure;
 
         WRITEDWORD(strlen(p.body.room.bgname)+1, dwordbuf);
         if(strlen(p.body.room.bgname) > 0) {

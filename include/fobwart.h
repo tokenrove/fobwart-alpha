@@ -15,18 +15,21 @@
 #include <dentata/tilemap.h>
 #include <dentata/set.h>
 
-#include <dentata/sample.h>
-#include <dentata/s3m.h>
-
 #include <lua.h>
 
 
 #define DATADIR "./data"
-#define DEFFONTFNAME   DATADIR "/def.fnt"
-#define LARGEFONTFNAME DATADIR "/slant.fnt"
-#define LIGHTPALFNAME  DATADIR "/light.pal"
-#define DARKPALFNAME   DATADIR "/dark.pal"
-#define DEFOBJSCRIPTFNAME DATADIR "/defobj.luc"
+#define BGDATADIR      DATADIR "/backgrounds"
+#define TILEDATADIR    DATADIR "/tiles"
+#define SPRITEDATADIR  DATADIR "/sprites"
+#define SCRIPTDATADIR  DATADIR "/scripts"
+#define FONTDATADIR    DATADIR "/fonts"
+#define PALETTEDATADIR DATADIR "/palettes"
+#define DEFFONTFNAME   FONTDATADIR "/def.fnt"
+#define LARGEFONTFNAME FONTDATADIR "/slant.fnt"
+#define LIGHTPALFNAME  PALETTEDATADIR "/light.pal"
+#define DARKPALFNAME   PALETTEDATADIR "/dark.pal"
+#define DEFOBJSCRIPTFNAME SCRIPTDATADIR "/defobj.luc"
 
 enum { FOBPORT = 6400 };
 
@@ -59,17 +62,13 @@ typedef struct typebuf_s {
 typedef struct object_s {
     char *name;
     objhandle_t handle;
-    roomhandle_t location, home;
+    roomhandle_t location;
 
     /* physics */
     word x, y;
     short ax, ay;
     short vx, vy;
     bool onground;
-
-    /* statistics */
-    word hp, maxhp;
-    d_set_t *inventory;
 
     /* graphics */
     char *spname;
@@ -78,12 +77,11 @@ typedef struct object_s {
 
     /* scripts */
     lua_State *luastate;
-    char *statebuf;
 } object_t;
 
 
 typedef struct room_s {
-    char *name;
+    char *name, *owner;
     roomhandle_t handle;
 
     /* physics */
@@ -91,7 +89,7 @@ typedef struct room_s {
     bool islit;
 
     /* graphics */
-    char *mapname;
+    d_set_t *mapfiles;
     d_tilemap_t *map;
     word tmhandle;
 
@@ -105,6 +103,7 @@ typedef struct room_s {
     roomhandle_t exits[NEXITS_PER_ROOM];
 
     /* scripts */
+    lua_State *luastate;
 } room_t;
 
 
@@ -191,23 +190,5 @@ extern int setobjectlua(lua_State *L);
 extern int getobjectlua(lua_State *L);
 extern void setluaenv(lua_State *L);
 extern int talklua(lua_State *L);
-
-/* unxaudio.c */
-extern void forkaudiothread(d_s3m_t *song);
-
-/* decor.c */
-extern d_image_t *ebar_new(d_image_t *raster);
-extern void ebar_draw(d_image_t *bar, d_color_t primary, int a, int b);
-
-/* decor.c */
-extern void decor_ll_mm2screen(d_image_t *bg);
-extern void decor_ll_mm2window(d_image_t *bg, d_rect_t r);
-
-/* local.c */
-extern void debouncecontrols(bool *bounce);
-
-/* type.c */
-extern void insertchar(typebuf_t *type, int i, bool shift);
-extern int handletextinput(typebuf_t *type, bool *bounce);
 
 /* EOF fobwart.h */

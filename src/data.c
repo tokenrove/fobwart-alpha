@@ -221,15 +221,18 @@ bool deskelobject(object_t *o)
     char *s;
     bool status;
 
-    s = d_memory_new(strlen(DATADIR)+strlen(o->spname)+6);
-    localsprintf(s, "%s/%s.spr", DATADIR, o->spname);
+    s = d_memory_new(strlen(SPRITEDATADIR)+strlen(o->spname)+6);
+    localsprintf(s, "%s/%s.spr", SPRITEDATADIR, o->spname);
     o->sprite = loadsprite(s);
     if(o->sprite == NULL) {
         d_error_push(__FUNCTION__": sprite load failed.");
         return failure;
     }
+    d_memory_delete(s);
 
-    localsprintf(s, "%s/%s.luc", DATADIR, o->spname);
+    s = d_memory_new(strlen(SCRIPTDATADIR)+strlen(o->spname)+6);
+    localsprintf(s, "%s/%s.luc", SCRIPTDATADIR, o->spname);
+
     o->luastate = lua_open(OBJSTACKSIZE);
     if(o->luastate == NULL) {
         d_error_push(__FUNCTION__": failed to init object's lua state.");
@@ -255,16 +258,25 @@ bool deskelobject(object_t *o)
 
 bool deskelroom(room_t *room)
 {
-    char *s;
+    char *s, *t;
+    dword key;
+    d_iterator_t it;
+    d_image_t *im;
 
-    s = d_memory_new(strlen(DATADIR)+strlen(room->mapname)+6);
-    localsprintf(s, "%s/%s.map", DATADIR, room->mapname);
-    room->map = loadtmap(s);
-    d_memory_delete(s);
-    if(room->map == NULL) return failure;
+    d_iterator_reset(&it);
+    while(key = d_set_nextkey(&it, room->mapfiles), key != D_SET_INVALIDKEY) {
+	d_set_fetch(room->mapfiles, key, (void **)&t);
+	s = d_memory_new(strlen(TILEDATADIR)+strlen(t)+6);
+	localsprintf(s, "%s/%s.pcx", TILEDATADIR, t);
+	im = d_pcx_load(s);
+	d_memory_delete(s);
+	d_memory_copy(&room->map->tiledesc, &im->desc,
+		      sizeof(d_rasterdescription_t));
+	d_tilemap_addtileimage(room->map, key, im);
+    }
 
-    s = d_memory_new(strlen(DATADIR)+strlen(room->bgname)+6);
-    localsprintf(s, "%s/%s.pcx", DATADIR, room->bgname);
+    s = d_memory_new(strlen(BGDATADIR)+strlen(room->bgname)+6);
+    localsprintf(s, "%s/%s.pcx", BGDATADIR, room->bgname);
     room->bg = d_pcx_load(s);
     d_memory_delete(s);
     if(room->bg == NULL) return failure;

@@ -115,10 +115,6 @@ int getobjectlua(lua_State *L)
             lua_pushnumber(L, o->ay);
         else if(strcmp(s, "onground") == 0)
             lua_pushnumber(L, o->onground);
-        else if(strcmp(s, "hp") == 0)
-            lua_pushnumber(L, o->hp);
-        else if(strcmp(s, "maxhp") == 0)
-            lua_pushnumber(L, o->maxhp);
         else if(strcmp(s, "spname") == 0)
             lua_pushstring(L, o->spname);
         else if(strcmp(s, "sphandle") == 0)
@@ -183,14 +179,6 @@ int setobjectlua(lua_State *L)
         } else if(strcmp(s, "onground") == 0) {
             if(!lua_isnumber(L, -1)) lua_error(L, __FUNCTION__": bad type");
             o->onground = (lua_tonumber(L, -1) > 0) ? true : false;
-
-        } else if(strcmp(s, "hp") == 0) {
-            if(!lua_isnumber(L, -1)) lua_error(L, __FUNCTION__": bad type");
-            o->hp = lua_tonumber(L, -1);
-
-        } else if(strcmp(s, "maxhp") == 0) {
-            if(!lua_isnumber(L, -1)) lua_error(L, __FUNCTION__": bad type");
-            o->maxhp = lua_tonumber(L, -1);
 
         } else if(strcmp(s, "spname") == 0) {
             if(!lua_isstring(L, -1)) lua_error(L, __FUNCTION__": bad type");

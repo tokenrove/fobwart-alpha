@@ -52,6 +52,18 @@ int main(int argc, char **argv)
     d_iterator_t it;
 
     d_memory_set(&room, 0, sizeof(room));
+    /* Small default map for fresh rooms. */
+    room.mapfiles = d_set_new(16);
+    d_set_add(room.mapfiles, 0, "clear");
+    d_set_add(room.mapfiles, 128, "airman00");
+    d_set_add(room.mapfiles, 129, "airman01");
+    d_set_add(room.mapfiles, 130, "airman02");
+    d_set_add(room.mapfiles, 131, "airman03");
+    room.map = d_memory_new(sizeof(d_tilemap_t));
+    room.map->w = room.map->h = 42;
+    room.map->map = d_memory_new(42*42);
+    d_memory_set(room.map->map, 0, 42*42);
+
     field = value = NULL;
     key = 0;
 
@@ -74,11 +86,11 @@ int main(int argc, char **argv)
                 } else if(comspec == 2) {
                     room.name = argv[i];
                 } else if(comspec == 3) {
-                    room.gravity = atoi(argv[i]);
+		    room.owner = argv[i];
                 } else if(comspec == 4) {
-                    room.islit = (strcmp(argv[i], "false"))?true:false;
+                    room.gravity = atoi(argv[i]);
                 } else if(comspec == 5) {
-                    room.mapname = argv[i];
+                    room.islit = (strcmp(argv[i], "false"))?true:false;
                 } else if(comspec == 6) {
                     room.bgname = argv[i];
                 } else if(comspec == 7) {
@@ -127,7 +139,7 @@ int main(int argc, char **argv)
     case HELP:
         printf("commands: help\n"
                "          create\n"
-               "          add <handle> <name> <gravity> <islit> <mapname> <bgname> <contents>\n"
+               "          add <handle> <name> <owner> <gravity> <islit> <bgname> <contents> <exits>\n"
                "          remove <handle>\n"
                "          view <handle>\n"
                "          change <handle> <field> <value>\n");
@@ -143,12 +155,12 @@ int main(int argc, char **argv)
 
         if(strcmp(field, "name") == 0) {
             room.name = value;
+	} else if(strcmp(field, "owner") == 0) {
+	    room.owner = value;
         } else if(strcmp(field, "gravity") == 0) {
             room.gravity = atoi(value);
         } else if(strcmp(field, "islit") == 0) {
             room.islit = (strcmp(argv[i], "false"))?true:false;
-        } else if(strcmp(field, "mapname") == 0) {
-            room.mapname = value;
         } else if(strcmp(field, "bgname") == 0) {
             room.bgname = value;
         } else if(strcmp(field, "contents") == 0) {
@@ -170,6 +182,8 @@ int main(int argc, char **argv)
         break;
 
     case ADD:
+	if(comspec != 9)
+            d_error_fatal("Not enough arguments for add.");
         status = roomdb_put(dbh, key, &room);
         if(status != success)
             d_error_fatal("Couldn't store room.");
@@ -180,11 +194,11 @@ int main(int argc, char **argv)
         if(status != success)
             d_error_fatal("Couldn't retreive room.");
 
-        printf("%ld -> name => %s, gravity => %d,\n islit => %s,\n "
-               "mapname => %s, bgname => %s\n contents => ",
-               key, room.name, room.gravity,
-               (room.islit == false) ? "false":"true",
-               room.mapname, room.bgname);
+        printf("%ld -> %dx%d -> name => %s, owner => %s, gravity => %d,\n"
+	       "islit => %s,\n bgname => %s\n contents => ",
+               key, room.map->w, room.map->h, room.name, room.owner,
+	       room.gravity, (room.islit == false) ? "false":"true",
+	       room.bgname);
         if(room.contents != NULL) {
             printf("{ ");
             d_iterator_reset(&it);

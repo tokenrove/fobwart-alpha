@@ -33,8 +33,10 @@ bool initlocal(gamedata_t *gd);
 void deinitlocal(gamedata_t *gd);
 void audioinit(gamedata_t *gd);
 void eventinit(gamedata_t *gd);
-void handleinput(gamedata_t *gd);
-void handlegameinput(gamedata_t *gd);
+bool isbounce(byte ev);
+void debouncecontrols(void);
+
+static bool bounce[EV_LAST];
 
 
 bool initlocal(gamedata_t *gd)
@@ -63,10 +65,6 @@ bool initlocal(gamedata_t *gd)
     d_image_setdataptr(gd->raster, d_raster_getgfxptr(), false);
 
     eventinit(gd);
-    gd->evmode = gameinput;
-    gd->type.buf = NULL;
-    gd->type.nalloc = 0;
-    gd->type.pos = 0;
 
     gd->fps = TARGETFPS;
     gd->slowmo = false;
@@ -101,7 +99,6 @@ void eventinit(gamedata_t *gd)
     d_event_map(EV_ACT, D_KBD_Z);
     d_event_map(EV_JUMP, D_KBD_LEFTALT);
     d_event_map(EV_JUMP, D_KBD_X);
-    d_event_map(EV_TALK, D_KBD_C);
     d_event_map(EV_BACKSPACE, D_KBD_BS);
     d_event_map(EV_ENTER, D_KBD_ENTER);
     d_event_map(EV_SHIFT, D_KBD_LEFTSHIFT);
@@ -109,11 +106,16 @@ void eventinit(gamedata_t *gd)
     d_event_map(EV_PAGEUP, D_KBD_PAGEUP);
     d_event_map(EV_PAGEDOWN, D_KBD_PAGEDOWN);
     d_event_map(EV_TAB, D_KBD_TAB);
+    d_event_map(EV_CONSOLE, D_KBD_GRAVE);
+    d_event_map(EV_INVENTORY, D_KBD_CAPSLOCK);
+    d_event_map(EV_HELP, D_KBD_F1);
+    d_event_map(EV_GAMEMODE, D_KBD_F2);
+    d_event_map(EV_ROOMMODE, D_KBD_F3);
 
     for(i = EV_ALPHABEGIN; i < EV_ALPHAEND; i++)
         d_event_map(i, keymap[i-EV_ALPHABEGIN]);
 
-    debouncecontrols(gd->bounce);
+    debouncecontrols();
     return;
 }
 
@@ -143,120 +145,18 @@ void deinitlocal(gamedata_t *gd)
 }
 
 
-void handleinput(gamedata_t *gd)
-{
-    int i;
-    event_t ev;
-
-    /* Message buffer scrolling. */
-    if(d_event_ispressed(EV_PAGEDOWN) && !gd->bounce[EV_PAGEDOWN] &&
-	gd->msgbuf.current->next != gd->msgbuf.bottom) {
-	gd->msgbuf.current = gd->msgbuf.current->next;
-    }
-
-    if(d_event_ispressed(EV_PAGEUP) && !gd->bounce[EV_PAGEUP] &&
-	gd->msgbuf.current != gd->msgbuf.head) {
-	gd->msgbuf.current = gd->msgbuf.current->prev;
-    }
-
-    switch(gd->evmode) {
-    case gameinput:
-        handlegameinput(gd);
-        break;
-
-    case textinput:
-        i = handletextinput(&gd->type, gd->bounce);
-        if(i == 1) {
-            gd->evmode = gameinput;
-            if(gd->type.pos > 0) {
-                ev.verb = VERB_TALK;
-                ev.subject = gd->localobj;
-                ev.auxdata = d_memory_new(gd->type.pos+1);
-                ev.auxlen = gd->type.pos+1;
-                d_memory_copy(ev.auxdata, gd->type.buf, gd->type.pos+1);
-                evsk_push(&gd->ws.evsk, ev);
-                d_memory_set(gd->type.buf, 0, gd->type.nalloc);
-                gd->type.pos = 0;
-            }
-        }
-        break;
-    };
-}
-
-
-void handlegameinput(gamedata_t *gd)
-{
-    room_t *room;
-    object_t *o;
-    event_t ev;
-    byte *d;
-
-    d_set_fetch(gd->ws.objs, gd->localobj, (void **)&o);
-    d_set_fetch(gd->ws.rooms, o->location, (void **)&room);
-
-    if(d_event_ispressed(EV_ACT) && !gd->bounce[EV_ACT]) {
-        ev.subject = gd->localobj;
-        ev.verb = VERB_ACT;
-        ev.auxdata = d = d_memory_new(1);
-        d[0] = 1;
-        ev.auxlen = 1;
-        evsk_push(&gd->ws.evsk, ev);
-    }
-
-    if(d_event_ispressed(EV_JUMP) && !gd->bounce[EV_JUMP]) {
-        ev.subject = gd->localobj;
-        ev.verb = VERB_ACT;
-        ev.auxdata = d = d_memory_new(1);
-        d[0] = 2;
-        ev.auxlen = 1;
-        evsk_push(&gd->ws.evsk, ev);
-    }
-
-    if(d_event_ispressed(EV_RIGHT)) {
-        ev.subject = gd->localobj;
-        ev.verb = VERB_RIGHT;
-        ev.auxdata = NULL;
-        ev.auxlen = 0;
-        evsk_push(&gd->ws.evsk, ev);
-    } else if(d_event_ispressed(EV_LEFT)) {
-        ev.subject = gd->localobj;
-        ev.verb = VERB_LEFT;
-        ev.auxdata = NULL;
-        ev.auxlen = 0;
-        evsk_push(&gd->ws.evsk, ev);
-    }
-
-    if(d_event_ispressed(EV_UP)) {
-        ev.subject = gd->localobj;
-        ev.verb = VERB_UP;
-        ev.auxdata = NULL;
-        ev.auxlen = 0;
-        evsk_push(&gd->ws.evsk, ev);
-    } else if(d_event_ispressed(EV_DOWN)) {
-        ev.subject = gd->localobj;
-        ev.verb = VERB_DOWN;
-        ev.auxdata = NULL;
-        ev.auxlen = 0;
-        evsk_push(&gd->ws.evsk, ev);
-    }
-
-    if(d_event_ispressed(EV_BACKSPACE) && !gd->bounce[EV_BACKSPACE])
-        room->islit ^= 1;
-
-    if(d_event_ispressed(EV_TALK) && !gd->bounce[EV_TALK])
-        gd->evmode = textinput;
-
-    debouncecontrols(gd->bounce);
-    return;
-}
-
-
-void debouncecontrols(bool *bounce)
+void debouncecontrols(void)
 {
     int i;
 
     for(i = 0; i < EV_LAST; i++)
         bounce[i] = d_event_ispressed(i);
+}
+
+
+bool isbounce(byte ev)
+{
+    return bounce[ev];
 }
 
 /* EOF local.c */

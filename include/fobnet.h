@@ -3,6 +3,9 @@
  * Julian Squires <tek@wiw.org> / 2001
  */
 
+#ifndef FOBNET_H
+#define FOBNET_H
+
 typedef void nethandle_t;
 
 /* Network related constants.
@@ -61,6 +64,7 @@ typedef struct packet_s {
 extern bool net_readpack(nethandle_t *, packet_t *p);
 extern bool net_writepack(nethandle_t *, packet_t p);
 extern void net_close(nethandle_t *);
+bool net_canread(nethandle_t *nh_);
 
 /* clinet.c */
 extern bool net_syncevents(nethandle_t *nh, eventstack_t *evsk);
@@ -73,5 +77,7 @@ extern bool net_newserver(nethandle_t **, int port);
 extern void net_servselect(nethandle_t *servnh_, bool *servisactive,
                            d_set_t *clients, dword *activeclients);
 extern bool net_accept(nethandle_t *servnh_, nethandle_t **clinh_);
+
+#endif
 
 /* EOF fobnet.h */

@@ -32,11 +32,6 @@
 
 int gameloop(gamedata_t *gd);
 bool clientinit(gamedata_t *gd, char *server, int port);
-void updatedecor(gamedata_t *gd, object_t *player);
-void updatemanager(gamedata_t *gd, object_t *o);
-void cameramanage(gamedata_t *gd, object_t *player);
-void updatetext(gamedata_t *gd);
-void updategreeting(gamedata_t *gd, char *greeting);
 
 
 int main(int argc, char **argv)
@@ -59,7 +54,7 @@ int main(int argc, char **argv)
 
 
     /* enter main loop */
-    mode = 1;
+    mode = 0;
     while(mode != -1) {
 	switch(mode) {
 	case 0:
@@ -67,7 +62,7 @@ int main(int argc, char **argv)
 	    break;
 
 	case 1:
-	    mode = tmapmode(&gd);
+	    mode = roomeditloop(&gd);
 	    break;
 
 	default:
@@ -89,10 +84,6 @@ int main(int argc, char **argv)
     destroydata(&gd);
     destroyworldstate(&gd.ws);
 
-    /* destroy msgbuf 
-    msgbuf_destroy(&gd.msgbuf);
-    */
-
     /* dump any extra errors. */
     d_error_dump();
 
@@ -100,6 +91,8 @@ int main(int argc, char **argv)
 }
 
 
+/* clientinit
+ * Setup the client initial (pre-login) state. */
 bool clientinit(gamedata_t *gd, char *server, int port)
 {
     bool status;
@@ -129,10 +122,6 @@ bool clientinit(gamedata_t *gd, char *server, int port)
 
     setluaworldstate(&gd->ws);
 
-    /* initialize message buffer */
-    msgbuf_init(&gd->msgbuf, MSGBUF_SIZE);
-    setluamsgbuf(&gd->msgbuf);
-
     /* load data from server */
     status = loaddata(gd);
     if(status != success) {
@@ -157,7 +146,11 @@ bool clientinit(gamedata_t *gd, char *server, int port)
 int gameloop(gamedata_t *gd)
 {
     d_timehandle_t *th;
+    widgetstack_t widgets;
+    bool focuslockedp;
+    widget_t *wp;
     object_t *o;
+    int i, retval = -1;
 
     getobject(gd, gd->localobj);
     if(d_set_fetch(gd->ws.objs, gd->localobj, (void **)&o) != success) {
@@ -166,191 +159,148 @@ int gameloop(gamedata_t *gd)
     }
     getroom(gd, o->location);
 
-    /* Reset type buffer */
-    gd->type.pos = 0;
-    gd->type.nalloc = 0;
-    gd->type.buf = NULL;
-    gd->type.done = false;
-
     /* Reset some miscellaneous variables */
     gd->quitcount = 0;
     gd->status = NULL;
-    gd->readycount = 40;
 
     /* music is disabled atm.
     if(gd->hasaudio && gd->cursong != NULL)
         forkaudiothread(gd->cursong);
     */
 
-
-    /* gd->focuswidget = 0; */
+    widgets.focus = 0;
+    widgets.top = 0;
+    widgets.nalloced = 16;
+    widgets.stack = d_memory_new(widgets.nalloced*sizeof(widget_t *));
+    widgets.stack[widgets.top++] = gamewidget_init(gd);
+    widgets.stack[widgets.top++] = msgboxwidget_init(gd);
+    widgets.stack[widgets.top++] = ebarwidget_init(gd);
+    widgets.stack[widgets.top++] = greetingwidget_init(gd, "READY");
+    widgets.stack[widgets.focus]->hasfocus = true;
+    focuslockedp = false;
 
     while(1) {
         th = d_time_startcount(gd->fps, false);
         d_event_update();
 
-        /* emergency exit key */
-        if(d_event_ispressed(EV_QUIT) && !gd->bounce[EV_QUIT]) {
-	    break;
+	/* Take input from the focused widget */
+	wp = widgets.stack[widgets.focus];
+	wp->input(wp);
+
+	/* If focus isn't locked, check to see if the user wants a different
+	   widget. */
+	wp = widgets.stack[widgets.top-1];
+	if(!focuslockedp) {
+	    widgets.stack[widgets.focus]->hasfocus = false;
+
+	    /* Debugging console */
+	    if(d_event_ispressed(EV_CONSOLE) && !isbounce(EV_CONSOLE)) {
+		widgets.stack[widgets.top++] = debugconsole_init(gd);
+		widgets.focus = widgets.top-1;
+		focuslockedp = true;
+  
+	    /* Inventory */
+	    } else if(widgets.focus == 0 &&
+		      wp->type != WIDGET_INVENTORY &&
+		      d_event_ispressed(EV_INVENTORY) &&
+		      !isbounce(EV_INVENTORY)) {
+
+
+	    /* Quit dialog */
+	    } else if(d_event_ispressed(EV_QUIT) && !isbounce(EV_QUIT)) {
+		widgets.stack[widgets.top++] = yesnodialog_init(gd,
+				          "Are you sure you want to quit?",
+							      WIDGET_QUIT);
+		widgets.focus = widgets.top-1;
+		focuslockedp = true;
+
+	    } else if(d_event_ispressed(EV_ROOMMODE) && !isbounce(EV_ROOMMODE)) {
+		retval = 1;
+		goto end;
+
+	    /* Cycle focus */
+	    } else if(d_event_ispressed(EV_TAB) && !isbounce(EV_TAB)) {
+		for(i = widgets.focus+1; i < widgets.top; i++) {
+		    if(widgets.stack[i]->takesfocus) {
+			widgets.focus = i;
+			break;
+		    }
+		}
+		if(i == widgets.top) {
+		    for(i = 0; i < widgets.focus; i++) {
+			if(widgets.stack[i]->takesfocus) {
+			    widgets.focus = i;
+			    break;
+			}
+		    }
+		}
+	    }
+
+	    widgets.stack[widgets.focus]->hasfocus = true;
 	}
 
-	/*
-	  gd->widgets[gd->focuswidget].input(gd);
-	*/
-        handleinput(gd);
+	debouncecontrols();
 
-        net_syncevents(gd->nh, &gd->ws.evsk);
+	/* Keep up to date with the server. */
+        net_sync(gd);
 
+	/* Update the world. */
         processevents(&gd->ws.evsk, (void *)gd);
         updatephysics(&gd->ws);
 
+	/* Flush the event stack. */
         while(evsk_pop(&gd->ws.evsk, NULL));
 
-	/*
-	  for(i = 0; i < gs->nwidgets; i++)
-	      gd->widgets[i].update(gd);
-	*/
-        /* update manager/graphics */
-        if(d_set_fetch(gd->ws.objs, gd->localobj, (void **)&o) != success) {
-            d_error_debug("ack. couldn't fetch localobj!\n");
-            return -1;
-        }
-        updatemanager(gd, o);
-        /* update decor */
-        updatedecor(gd, o);
-        /* update text */
-        updatetext(gd);
-	/* update greeting message */
-	updategreeting(gd, "READY");
+	/* Update each widget in order. */
+	for(i = 0; i < widgets.top; i++) {
+	    wp = widgets.stack[i];
+	    /* Update the widget -- is it ready to be closed? */
+	    if(wp->update(wp)) {
+		d_memory_move(&widgets.stack[i],
+			      &widgets.stack[i+1],
+			      (widgets.top-i-1)*sizeof(widget_t *));
+		widgets.top--;
+		if(widgets.focus == i) {
+		    widgets.focus = 0;
+		    widgets.stack[widgets.focus]->hasfocus = true;
+		}
+
+		switch(wp->type) {
+		case WIDGET_QUIT:
+		    if(yesnodialog_return(wp)) {
+			wp->close(wp);
+			goto end;
+		    }
+		    wp->close(wp);
+		    focuslockedp = false;
+		    break;
+
+		case WIDGET_INVENTORY:
+		    /* curitem = inventwidget_return(wp) */
+		    wp->close(wp);
+		    focuslockedp = false;
+		    break;
+
+		case WIDGET_GREETING:
+		    wp->close(wp);
+		    break;
+
+		case WIDGET_CONSOLE:
+		    wp->close(wp);
+		    focuslockedp = false;
+		    break;
+		}
+	    }
+	}
 
         d_raster_update();
         d_time_endcount(th);
     }
 
-    return -1;
-}
-
-
-/* updategreeting
- * display a flashing message in the center of the screen, while
- * the ``readycount'' is still valid. (it's reset on a new game and
- * on a death) */
-void updategreeting(gamedata_t *gd, char *greeting)
-{
-    d_point_t pt;
-
-    if(gd->readycount > 0) {
-	pt.x = (gd->raster->desc.w-
-		d_font_gettextwidth(gd->largefont,
-				    (byte *)"%s", greeting))/2;
-	pt.y = (gd->raster->desc.h-gd->largefont->desc.h)/2-20;
-	gd->readycount--;
-	
-	if(gd->readycount%8 > 4)
-	    d_font_printf(gd->raster, gd->largefont, pt, (byte *)"%s",
-			  greeting);
-    }
-    return;
-}
-
-
-void updatedecor(gamedata_t *gd, object_t *player)
-{
-    d_point_t pt;
-    d_color_t c;
-
-    /* Grab the message box color. */
-    d_memory_copy(&gd->ebar->palette, gd->curpalette,
-		  D_NCLUTITEMS*D_BYTESPERCOLOR);
-    c = d_color_fromrgb(gd->ebar, 220, 220, 170);
-
-    /* Draw player's energy bar. */
-    ebar_draw(gd->ebar, d_color_fromrgb(gd->ebar, 255, 255, 190),
-              player->hp, player->maxhp);
-    pt.x = 8;
-    pt.y = 8;
-    d_image_blit(gd->raster, gd->ebar, pt);
-
-    /* Draw message box. */
-    pt.x = 0;
-    pt.y = 200;
-    for(pt.y = 200; pt.y < gd->raster->desc.h; pt.y++)
-        for(pt.x = 0; pt.x < gd->raster->desc.w; pt.x++) {
-            d_image_setpelcolor(gd->raster, pt, c);
-        }
-
-    return;
-}
-
-
-void updatemanager(gamedata_t *gd, object_t *o)
-{
-    room_t *room;
-    d_iterator_t it;
-    dword key;
-    object_t *o2;
-
-    d_set_fetch(gd->ws.rooms, o->location, (void **)&room);
-    d_iterator_reset(&it);
-    while(key = d_set_nextkey(&it, gd->ws.objs), key != D_SET_INVALIDKEY) {
-        d_set_fetch(gd->ws.objs, key, (void **)&o2);
-        d_manager_jumpsprite(o2->sphandle, o2->x, o2->y);
-    }
-    cameramanage(gd, o);
-    d_manager_draw(gd->raster);
-    if(room->islit)
-        gd->curpalette = &gd->light;
-    else
-        gd->curpalette = &gd->dark;
-    d_raster_setpalette(gd->curpalette);
-    return;
-}
-
-
-void cameramanage(gamedata_t *gd, object_t *player)
-{
-    int x, y;
-    d_rect_t r;
-
-    r = d_manager_getvirtualrect();
-    x = player->x-gd->raster->desc.w/2;
-    y = player->y-gd->raster->desc.h/2;
-    if(x+gd->raster->desc.w > r.w) x = r.w-gd->raster->desc.w;
-    /* Note: height of text window */
-    if(y+(gd->raster->desc.h-40) > r.h) y = r.h-(gd->raster->desc.h-40);
-    if(x < 0) x = 0;
-    if(y < 0) y = 0;
-    d_manager_jump(x, y);
-    return;
-}
-
-
-void updatetext(gamedata_t *gd)
-{
-    d_point_t pt;
-    msgbufline_t *p;
-
-    /* update text */
-    pt.y = 202; pt.x = 2;
-    if(gd->evmode == textinput) {
-	if(gd->type.buf) {
-	    gd->type.buf[gd->type.pos] = 0;
-            d_font_printf(gd->raster, gd->deffont, pt, (byte *)
-                          gd->type.buf);
-	}
-        pt.x = 2+gd->type.pos*gd->deffont->desc.w;
-        d_font_printf(gd->raster, gd->deffont, pt, (byte *)"\x10");
-    }
-
-    pt.x = 2; pt.y += gd->deffont->desc.h+1;
-    for(p = gd->msgbuf.current; p->line.data && p != gd->msgbuf.bottom &&
-	    pt.y < gd->raster->desc.h-gd->deffont->desc.h+1; p = p->next) {
-	d_font_printf(gd->raster, gd->deffont, pt, (byte *)"%s", p->line.data);
-
-	pt.y += gd->deffont->desc.h+1;
-    }
-
-    return;
+ end:
+    /* wipe widget stack */
+    d_memory_delete(widgets.stack);
+    return retval;
 }
 
 

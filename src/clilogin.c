@@ -52,6 +52,10 @@ bool loginscreen(gamedata_t *gd, char **uname, char **password)
     int i, onfield;
     d_font_t *lshadow;
     char *field;
+    typebuf_t type;
+
+    type.pos = type.nalloc = 0;
+    type.buf = NULL; type.done = false;
 
     /* Setup a palette and a shadow font. */
     d_raster_setpalette(&gd->raster->palette);
@@ -66,13 +70,13 @@ bool loginscreen(gamedata_t *gd, char **uname, char **password)
 	if(d_event_ispressed(EV_QUIT))
 	    return failure;
 
-        i = handletextinput(&gd->type, gd->bounce);
+        i = handletextinput(&type);
         if(i == 1) {
-            if(gd->type.pos > 0) {
-                field = d_memory_new(gd->type.pos+1);
-                d_memory_copy(field, gd->type.buf, gd->type.pos+1);
-                d_memory_set(gd->type.buf, 0, gd->type.nalloc);
-                gd->type.pos = 0;
+            if(type.pos > 0) {
+                field = d_memory_new(type.pos+1);
+                d_memory_copy(field, type.buf, type.pos+1);
+                d_memory_set(type.buf, 0, type.nalloc);
+                type.pos = 0;
                 if(onfield == 0) {
                     *uname = field;
                     onfield++;
@@ -82,6 +86,7 @@ bool loginscreen(gamedata_t *gd, char **uname, char **password)
                 }
             }
         }
+	debouncecontrols();
 
 	/* display the cute mm2 screen decorations. */
         decor_ll_mm2screen(gd->raster);
@@ -101,14 +106,14 @@ bool loginscreen(gamedata_t *gd, char **uname, char **password)
 
         if(onfield == 0) {
 	    /* display the field currently being edited */
-            if(gd->type.buf) {
+            if(type.buf) {
 		/* clip the field at the cursor position */
-		gd->type.buf[gd->type.pos] = 0;
+		type.buf[type.pos] = 0;
                 d_font_printf(gd->raster, gd->deffont, pt, (byte *)"%s",
-                              gd->type.buf);
+                              type.buf);
 	    }
 	    /* plot the cursor */
-            pt.x += gd->type.pos*gd->deffont->desc.w;
+            pt.x += type.pos*gd->deffont->desc.w;
             d_font_printf(gd->raster, gd->deffont, pt, (byte *)"\x10");
         } else
             d_font_printf(gd->raster, gd->deffont, pt, (byte *)"%s", *uname);
@@ -130,14 +135,14 @@ bool loginscreen(gamedata_t *gd, char **uname, char **password)
 	   either be empty or in the process of being edited, so there's
 	   no point drawing the finished password. */
         if(onfield == 1) {
-            if(gd->type.buf)
-		for(i = 0; i < gd->type.pos; i++) {
-		    if(gd->type.buf[i])
+            if(type.buf)
+		for(i = 0; i < type.pos; i++) {
+		    if(type.buf[i])
 			d_font_printf(gd->raster, gd->deffont, pt, (byte *)"*");
 		    pt.x += gd->deffont->desc.w;
 		}
 	    pt.x = 6+d_font_gettextwidth(gd->largefont, PASSPROMPT);
-            pt.x += gd->type.pos*gd->deffont->desc.w;
+            pt.x += type.pos*gd->deffont->desc.w;
             d_font_printf(gd->raster, gd->deffont, pt, (byte *)"\x10");
 	}
 
