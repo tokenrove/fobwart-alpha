@@ -1,7 +1,7 @@
 /* 
  * network.c
  * Created: Wed Jul 18 01:29:32 2001 by tek@wiw.org
- * Revised: Thu Jul 19 19:40:25 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 19:50:01 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -158,6 +158,7 @@ bool getobject(gamedata_t *gd, word handle)
     if(status == failure) return failure;
     o->sprite = loadsprite(DATADIR "/phibes.spr");
     o->name = "phibes";
+    o->name[0] += handle;
     status = d_manager_addsprite(o->sprite, &o->sphandle, 0);
     if(status == failure)
         return failure;

@@ -1,7 +1,7 @@
 /* 
  * event.c
  * Created: Sun Jul 15 03:40:42 2001 by tek@wiw.org
- * Revised: Thu Jul 19 19:25:20 2001 by tek@wiw.org
+ * Revised: Thu Jul 19 19:51:11 2001 by tek@wiw.org
  * Copyright 2001 Julian E. C. Squires (tek@wiw.org)
  * This program comes with ABSOLUTELY NO WARRANTY.
  * $Id$
@@ -53,14 +53,23 @@ void processevents(gamedata_t *gd)
 
     while(evsk_top(&gd->evsk, &ev)) {
         status = d_set_fetch(gd->objs, ev.subject, (void **)&o);
-        if(status != success)
+        if(status != success) {
             status = getobject(gd, ev.subject);
 
-        if(status != success) {
-            d_error_debug(__FUNCTION__": failed to fetch object %d.\n",
-                          ev.subject);
-            evsk_pop(&gd->evsk);
-            continue;
+            if(status != success) {
+                d_error_debug(__FUNCTION__": failed to fetch object %d.\n",
+                              ev.subject);
+                evsk_pop(&gd->evsk);
+                continue;
+            }
+
+            status = d_set_fetch(gd->objs, ev.subject, (void **)&o);
+            if(status != success) {
+                d_error_debug(__FUNCTION__": dwarf invasion object %d.\n",
+                              ev.subject);
+                evsk_pop(&gd->evsk);
+                continue;
+            }
         }
 
         switch(ev.verb) {
